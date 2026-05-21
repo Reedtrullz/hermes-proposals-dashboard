@@ -1,0 +1,52 @@
+- name: Deploy Kanban Dashboard proxy config
+  hosts: vps
+  become: yes
+  gather_facts: no
+
+  vars:
+    domain: kanban.reidar.tech
+    proxy_port: 8089
+    caddyfile: /etc/caddy/Caddyfile
+
+  tasks:
+    - name: Read current Caddyfile
+      slurp:
+        src: "{{ caddyfile }}"
+      register: _caddy
+
+    - name: Normalize Caddyfile content
+      set_fact:
+        caddy_content: "{{ _caddy.content | b64decode }}"
+
+    - name: Check if kanban block already exists
+      set_fact:
+        kanban_exists: "{{ 'kanban.reidar.tech' in caddy_content }}"
+
+    - name: Add kanban server block to Caddyfile
+      blockinfile:
+        path: "{{ caddyfile }}"
+        marker: "# {mark} Hermes Kanban Dashboard (managed by Ansible)"
+        block: |
+          kanban.reidar.tech {
+            reverse_proxy localhost:{{ proxy_port }}
+          }
+        insertafter: EOF
+        mode: "0644"
+      register: _caddy_update
+
+    - name: Validate Caddy config
+      command: caddy validate --config {{ caddyfile }}
+      changed_when: false
+
+    - name: Reload Caddy
+      command: caddy reload --config {{ caddyfile }}
+      when: _caddy_update.changed
+
+    - name: Report
+      debug:
+        msg: >
+          {% if _caddy_update.changed %}
+          Caddy updated and reloaded. Ensure the tunnel is running on the local machine.
+          {% else %}
+          Caddy config already up to date — no changes needed.
+          {% endif %}

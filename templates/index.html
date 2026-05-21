@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Kanban</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d2991d;
+      --red: #f85149;
+      --purple: #a371f7;
+      --orange: #d2991d;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header .profiles { font-size: 12px; color: var(--muted); }
+    .board {
+      display: flex;
+      gap: 1px;
+      height: calc(100vh - 48px);
+      overflow-x: auto;
+      background: var(--border);
+    }
+    .column {
+      flex: 1;
+      min-width: 240px;
+      max-width: 400px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .column-header {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+    }
+    .column-header .count {
+      background: var(--surface);
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+    }
+    .column-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .task-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font-size: 13px;
+    }
+    .task-card:hover { border-color: var(--accent); }
+    .task-card .task-title {
+      font-weight: 500;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .task-card .task-meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .task-card .task-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .badge-fail { background: #3d1e1e; color: var(--red); }
+    .badge-running { background: #1a2e1a; color: var(--green); }
+    .badge-blocked { background: #2e2416; color: var(--orange); }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal h2 { margin-bottom: 12px; font-size: 16px; }
+    .modal .field { margin-bottom: 10px; }
+    .modal .field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 3px;
+      text-transform: uppercase;
+    }
+    .modal .field input, .modal .field textarea, .modal .field select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .modal .field textarea { min-height: 80px; resize: vertical; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: white; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-danger { color: var(--red); }
+    .btn-danger:hover { background: #3d1e1e; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+    .new-task-btn {
+      display: block;
+      width: 100%;
+      padding: 6px;
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .new-task-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .comments { margin-top: 12px; }
+    .comment {
+      border-top: 1px solid var(--border);
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .comment .author { color: var(--muted); font-size: 11px; }
+    .runs { margin-top: 12px; }
+    .run {
+      border-top: 1px solid var(--border);
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .empty-state {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 20px 0;
+    }
+    .status-select {
+      font-size: 11px;
+      padding: 2px 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .htmx-indicator { opacity: 0; transition: opacity 0.2s; }
+    .htmx-request .htmx-indicator { opacity: 1; }
+    .htmx-request.htmx-indicator { opacity: 1; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Hermes Kanban</h1>
+  <span class="profiles">
+    {% if assignees -%}
+      Profiles: {{ assignees | join(', ') }}
+    {%- endif %}
+  </span>
+</header>
+
+<div class="board" id="board"
+     hx-get="/api/board" hx-trigger="every 30s" hx-swap="outerHTML">
+  {% for col in COLUMNS %}
+  <div class="column" id="col-{{ col }}">
+    <div class="column-header">
+      <span>{{ STATUS_LABELS[col] }}</span>
+      <span class="count">{{ tasks_by_status[col] | length }}</span>
+    </div>
+    <div class="column-body"
+         hx-target="#col-{{ col }} .column-body"
+         hx-swap="beforeend">
+      {% for task in tasks_by_status[col] %}
+        {% include "_task_card.html" %}
+      {% endfor %}
+      {% if col == 'todo' %}
+      <button class="new-task-btn"
+              onclick="document.getElementById('new-task-modal').classList.add('active')">
+        + New Task
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Task detail modal -->
+<div class="modal-overlay" id="task-modal"
+     _="on closeModal remove .active from me">
+  <div class="modal" id="task-modal-content"></div>
+</div>
+
+<!-- New task form modal -->
+<div class="modal-overlay" id="new-task-modal">
+  <div class="modal">
+    <h2>New Task</h2>
+    <form hx-post="/api/tasks" hx-target="#col-todo .column-body" hx-swap="beforeend"
+          hx-on::after-request="document.getElementById('new-task-modal').classList.remove('active')">
+      <div class="field">
+        <label>Title</label>
+        <input name="title" required autofocus>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea name="body" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label>Assignee</label>
+        <select name="assignee">
+          <option value="">— none —</option>
+          {% for a in assignees %}
+          <option value="{{ a }}">{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Priority (0=normal, higher=more urgent)</label>
+        <input name="priority" type="number" value="0" min="0" max="100">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button type="button" class="btn"
+                onclick="document.getElementById('new-task-modal').classList.remove('active')">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Show new task modal
+  document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+    if (evt.detail.target && evt.detail.target.matches && evt.detail.target.matches('#new-task-modal')) {
+      document.getElementById('new-task-modal').classList.add('active');
+    }
+  });
+
+  // Load task detail into modal
+  async function openTask(id) {
+    const modal = document.getElementById('task-modal');
+    const content = document.getElementById('task-modal-content');
+    content.innerHTML = '<p style="color:var(--muted)">Loading...</p>';
+    modal.classList.add('active');
+    try {
+      const res = await fetch('/api/tasks/' + id);
+      const t = await res.json();
+      if (t.error) { content.innerHTML = '<p>Not found</p>'; return; }
+      content.innerHTML = renderTaskDetail(t, id);
+    } catch(e) {
+      content.innerHTML = '<p>Error loading task</p>';
+    }
+  }
+
+  function renderTaskDetail(t, id) {
+    const runs = (t.runs || []).map(r =>
+      `<div class="run"><strong>${r.profile || '?'}</strong>: ${r.outcome || r.status} — ${r.summary || ''}</div>`
+    ).join('');
+    const comments = (t.comments || []).map(c =>
+      `<div class="comment"><span class="author">${c.author}</span>: ${c.body}</div>`
+    ).join('');
+    const parents = (t.parents||[]).map(p => `<a href="#" onclick="openTask('${p}');return false" style="color:var(--accent)">${p.substring(0,16)}</a>`).join(', ') || 'none';
+    const children = (t.children||[]).map(c => `<a href="#" onclick="openTask('${c}');return false" style="color:var(--accent)">${c.substring(0,16)}</a>`).join(', ') || 'none';
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <h2>${escapeHtml(t.title)}</h2>
+        <button class="btn btn-sm"
+                onclick="document.getElementById('task-modal').classList.remove('active')">✕</button>
+      </div>
+      <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">
+        ID: ${id.substring(0,18)} · Status: ${t.status} · Assignee: ${t.assignee || 'none'} · Priority: ${t.priority}
+      </div>
+      ${t.body ? `<div style="margin-bottom:12px;white-space:pre-wrap;font-size:13px">${escapeHtml(t.body)}</div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        ${['todo','ready','in_progress','blocked','done','archived'].map(s =>
+          `<button class="btn btn-sm ${s === t.status ? 'btn-primary' : ''}"
+                   hx-patch="/api/tasks/${id}/status"
+                   hx-vals='{"status":"${s}"}'
+                   hx-target="#task-${id}"
+                   hx-swap="outerHTML"
+                   hx-on::after-request="document.getElementById('task-modal').classList.remove('active')">
+            → ${s.replace('_',' ')}
+          </button>`
+        ).join('')}
+      </div>
+
+      <div style="font-size:12px;color:var(--muted)">
+        <div>Parents: ${parents}</div>
+        <div>Children: ${children}</div>
+      </div>
+
+      ${runs ? `<div class="runs"><h3 style="font-size:13px;margin-bottom:6px">Runs (${t.runs.length})</h3>${runs}</div>` : ''}
+      ${comments ? `<div class="comments"><h3 style="font-size:13px;margin-bottom:6px">Comments (${t.comments.length})</h3>${comments}</div>` : ''}
+
+      <form style="margin-top:12px;display:flex;gap:6px"
+            hx-post="/api/tasks/${id}/comments"
+            hx-on::after-request="this.reset();openTask('${id}')">
+        <input name="body" placeholder="Add comment..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-size:12px">
+        <button type="submit" class="btn btn-sm btn-primary">Post</button>
+      </form>
+    `;
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Close modal on overlay click
+  document.getElementById('task-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+  });
+</script>
+</body>
+</html>

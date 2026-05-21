@@ -1,0 +1,19 @@
+<div class="task-card" id="task-{{ task.id }}"
+     onclick="openTask('{{ task.id }}')">
+  <div class="task-title">{{ task.title }}</div>
+  <div class="task-meta">
+    {% if task.assignee %}
+    <span>👤 {{ task.assignee }}</span>
+    {% endif %}
+    {% if task.priority > 0 %}
+    <span>⚡ {{ task.priority }}</span>
+    {% endif %}
+    {% if task.consecutive_failures > 0 %}
+    <span class="badge badge-fail">⚠ {{ task.consecutive_failures }}</span>
+    {% endif %}
+    {% if task.status == 'in_progress' and task.current_run_id %}
+    <span class="badge badge-running">● running</span>
+    {% endif %}
+    <span style="font-size:10px;color:var(--muted)">{{ task.id[:12] }}</span>
+  </div>
+</div>
