@@ -124,20 +124,14 @@ async def board_view(request: Request, board: str, fragment: bool = False):
         db.close()
     boards = list_boards()
     if fragment:
-        return templates.TemplateResponse("_board.html", {
-            "request": request,
-            "board": board,
-            "boards": boards,
-            "tasks_by_status": tasks_by_status,
-            "assignees": assignees,
-        })
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "board": board,
-        "boards": boards,
-        "tasks_by_status": tasks_by_status,
-        "assignees": assignees,
-    })
+        return templates.TemplateResponse(
+            request=request, name="_board.html",
+            context={"board": board, "boards": boards, "tasks_by_status": tasks_by_status, "assignees": assignees},
+        )
+    return templates.TemplateResponse(
+        request=request, name="index.html",
+        context={"board": board, "boards": boards, "tasks_by_status": tasks_by_status, "assignees": assignees},
+    )
 
 
 # ── REST API ───────────────────────────────────────────────
