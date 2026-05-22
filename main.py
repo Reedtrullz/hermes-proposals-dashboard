@@ -1185,6 +1185,19 @@ async def api_agent_executor_status(agent_id: str):
     }
 
 
+@app.get("/api/agents/{agent_id}/executor-status-ui", response_class=HTMLResponse)
+async def api_agent_executor_status_ui(agent_id: str):
+    result = await api_agent_executor_status(agent_id)
+    if isinstance(result, JSONResponse):
+        return HTMLResponse("<span class='badge' style='background:#f8514933;color:#f85149'>Not found</span>")
+    ready = result.get("ready", False)
+    status = result.get("status", "unknown")
+    if ready:
+        return HTMLResponse(f"<span class='badge' style='background:#3fb95033;color:#3fb950'>Ready — {result.get('version', result.get('path', ''))}</span>")
+    else:
+        return HTMLResponse(f"<span class='badge' style='background:#f8514933;color:#f85149'>Not ready — {status}</span>")
+
+
 @app.get("/api/proposals/{proposal_id}/fragment", response_class=HTMLResponse)
 async def proposal_fragment(request: Request, proposal_id: str):
     with db_connect() as db:

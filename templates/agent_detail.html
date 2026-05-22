@@ -27,6 +27,14 @@
       <p class="small" style="margin-top:4px"><strong>Executor:</strong>
         {% if exec == 'hermes' %}Hermes (native){% else %}<span class="badge" style="background:#1a2332;color:#58a6ff;border:1px solid #1f6feb33">{{ exec }}</span>{% endif %}
       </p>
+      {% if exec != 'hermes' %}
+      <div style="margin-top:10px">
+        <button class="btn btn-sm" hx-get="/api/agents/{{ agent.id }}/executor-status-ui" hx-target="#executor-status-result" hx-swap="innerHTML">
+          Verify CLI
+        </button>
+        <span id="executor-status-result" class="small" style="margin-left:8px"></span>
+      </div>
+      {% endif %}
       <div class="small" style="margin-top:10px">This month: {{ money(agent.monthly_actual_spend_usd) }} / {{ money(agent.monthly_budget_usd) }}</div>
       <div class="meter"><span style="width:{% if agent.monthly_budget_usd %}{{ [100, (agent.monthly_actual_spend_usd / agent.monthly_budget_usd * 100)|round(0)]|min }}{% else %}0{% endif %}%"></span></div>
       <div class="small muted" style="margin-top:6px">All-time: {{ money(agent.actual_spend_usd) }} actual / {{ money(agent.estimated_spend_usd) }} estimated</div>
