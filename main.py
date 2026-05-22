@@ -1,6 +1,8 @@
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -1132,6 +1134,55 @@ async def api_proposal_executor(proposal_id: str):
     with db_connect() as db:
         result = get_executor_for_proposal(db, proposal_id)
     return {"proposal_id": proposal_id, "executor": result}
+
+
+@app.get("/api/agents/{agent_id}/executor-status")
+async def api_agent_executor_status(agent_id: str):
+    with db_connect() as db:
+        agent = row(db.execute("SELECT id, name, executor_type FROM agents WHERE id=?", (agent_id,)))
+    if not agent:
+        return JSONResponse({"error": "agent not found"}, status_code=404)
+
+    executor_type = agent.get("executor_type", "hermes")
+    if executor_type == "hermes":
+        return {"agent_id": agent_id, "executor_type": "hermes", "status": "native", "ready": True}
+
+    BINARY_MAP = {
+        "codex": ("codex", "codex --version"),
+        "claude-code": ("claude", "claude --version"),
+        "opencode": ("opencode", "opencode --version"),
+        "agy": ("agy", "agy --version"),
+        "command-code": ("cmd", "cmd --version"),
+        "kilo": ("kilo", "kilo --version"),
+    }
+
+    binary, version_cmd = BINARY_MAP.get(executor_type, (None, None))
+    if not binary:
+        return {"agent_id": agent_id, "executor_type": executor_type, "status": "unknown_executor", "ready": False}
+
+    which = shutil.which(binary)
+    if not which:
+        return {"agent_id": agent_id, "executor_type": executor_type, "binary": binary, "status": "not_found", "ready": False, "path": None}
+
+    try:
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=10)
+        version_output = result.stdout.strip() or result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return {"agent_id": agent_id, "executor_type": executor_type, "binary": binary, "status": "timeout", "ready": False, "path": which}
+    except FileNotFoundError:
+        return {"agent_id": agent_id, "executor_type": executor_type, "binary": binary, "status": "not_found", "ready": False, "path": which}
+    except Exception as exc:
+        return {"agent_id": agent_id, "executor_type": executor_type, "binary": binary, "status": "error", "ready": False, "path": which, "error": str(exc)}
+
+    return {
+        "agent_id": agent_id,
+        "executor_type": executor_type,
+        "binary": binary,
+        "status": "ok",
+        "ready": True,
+        "path": which,
+        "version": version_output[:200],
+    }
 
 
 @app.get("/api/proposals/{proposal_id}/fragment", response_class=HTMLResponse)
