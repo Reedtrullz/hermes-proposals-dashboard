@@ -47,7 +47,31 @@ def _init_db():
     db.commit(); db.close()
 _init_db()
 
+AUTH_URL = os.environ.get("AUTH_URL", "https://reidar.tech")
+
+# ── Auth middleware ───────────────────────────────────────
+
+from fastapi import HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import RedirectResponse
+import http.client, urllib.parse
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path.startswith("/api/"):
+            # API routes: check session token exists
+            token = request.cookies.get("__Secure-next-auth.session-token") or request.cookies.get("next-auth.session-token")
+            if not token:
+                return JSONResponse({"error": "unauthorized"}, status_code=401)
+        else:
+            # Page routes: redirect to signin if no token
+            token = request.cookies.get("__Secure-next-auth.session-token") or request.cookies.get("next-auth.session-token")
+            if not token:
+                return RedirectResponse(f"{AUTH_URL}/api/auth/signin")
+        return await call_next(request)
+
 app = FastAPI(title="Hermes Proposals")
+app.add_middleware(AuthMiddleware)
 
 
 # ═══════════════════════════════════════════════════════════

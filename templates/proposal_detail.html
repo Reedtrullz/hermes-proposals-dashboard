@@ -84,10 +84,10 @@ window.addEventListener('load',function(){
 });
 // Pause auto-refresh while typing in reply inputs
 document.addEventListener('focusin',function(e){
-  if(e.target.closest('.reply-form input')) document.getElementById('proposal-content').setAttribute('hx-trigger','manual');
+  if(e.target.closest('.reply-form')) document.getElementById('proposal-content').setAttribute('hx-trigger','manual');
 });
 document.addEventListener('focusout',function(e){
-  if(e.target.closest('.reply-form input')) document.getElementById('proposal-content').setAttribute('hx-trigger','every 5s');
+  if(e.target.closest('.reply-form')) document.getElementById('proposal-content').setAttribute('hx-trigger','every 5s');
 });
 </script>
 </body>
