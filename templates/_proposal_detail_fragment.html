@@ -1,0 +1,86 @@
+<div id="proposal-content" hx-get="/api/proposals/{{ proposal.id }}/fragment" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="detail-header">
+    <h2>{{ proposal.title }}</h2>
+    <div class="meta">
+      <span class="badge badge-{{ proposal.status }}">{{ PROPOSAL_LABELS[proposal.status] }}</span>
+      <span>{{ proposal.board }}</span>
+      <span>by {{ proposal.author }}</span>
+      <span class="reltime" data-ts="{{ proposal.updated_at }}"></span>
+    </div>
+  </div>
+
+  {% if proposal.body %}
+  <div class="detail-body">{{ proposal.body }}</div>
+  {% endif %}
+
+  <div class="status-bar">
+    {% for s in ["review","approved","implemented","rejected"] %}
+    <button class="btn {% if proposal.status == s %}btn-active{% elif s == 'approved' %}btn-approve{% elif s == 'rejected' %}btn-reject{% endif %}"
+            hx-patch="/api/proposals/{{ proposal.id }}/status"
+            hx-vals='{"status":"{{ s }}"}'
+            hx-swap="none">
+      {% if proposal.status == s %}● {% endif %}{{ PROPOSAL_LABELS[s] }}
+    </button>
+    {% endfor %}
+  </div>
+
+  {% if proposal.status == 'processing' %}
+  <div class="processing-bar">
+    <div class="spinner"></div>
+    <span style="font-size:13px;color:var(--accent)">Agents are analyzing your proposal. Comments will appear here as they respond...</span>
+  </div>
+  {% endif %}
+
+  <div class="comments-section">
+    <h3>Agent reviews ({{ comments|selectattr('parent_id','none')|list|length }})</h3>
+
+    {% set top_level = comments|selectattr('parent_id','none')|list %}
+    {% for c in top_level %}
+    {% set replies = comments|selectattr('parent_id','equalto',c.id)|list %}
+    <div class="thread">
+      <div class="comment" style="border-left-color:{% if c.author in AGENT_COLORS %}{{ AGENT_COLORS[c.author] }}{% else %}var(--muted){% endif %};border-left-width:3px;border-left-style:solid">
+        <div class="author-line">
+          <span>{% if c.author in AGENT_EMOJI %}{{ AGENT_EMOJI[c.author] }}{% else %}?{% endif %}</span>
+          <span class="author-name">{{ c.author }}</span>
+          <span class="author-badge">agent</span>
+        </div>
+        <div class="body md-body">{{ c.body }}</div>
+        <div class="time reltime" data-ts="{{ c.created_at }}"></div>
+        <button class="reply-toggle" onclick="toggleReply({{ c.id }})">↩ Reply</button>
+      </div>
+
+      {% if replies %}
+      <div class="replies">
+        {% for r in replies %}
+        <div class="comment">
+          <div class="author-line">
+            <span>💬</span>
+            <span class="author-name">{{ r.author }}</span>
+          </div>
+          <div class="body md-body">{{ r.body }}</div>
+          <div class="time reltime" data-ts="{{ r.created_at }}"></div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form class="reply-form" id="reply-{{ c.id }}"
+            hx-post="/api/proposals/{{ proposal.id }}/comments"
+            hx-vals='{"parent_id":"{{ c.id }}"}'
+            hx-target="#proposal-content"
+            hx-swap="outerHTML"
+            hx-on::after-request="this.reset()">
+        <input type="hidden" name="author" value="user">
+        <input name="body" placeholder="Reply to {{ c.author }}..." required>
+        <button type="submit">Send</button>
+      </form>
+    </div>
+    {% endfor %}
+
+    {% if not top_level %}
+    <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">
+      Waiting for agent reviews...
+    </div>
+    {% endif %}
+  </div>
+</div>

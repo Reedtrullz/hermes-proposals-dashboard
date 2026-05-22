@@ -4,93 +4,90 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Proposals — Hermes</title>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <style>
     :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --yellow:#d2991d; --red:#f85149; --purple:#a371f7; }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; gap:12px; }
-    header h1 { font-size:15px; font-weight:600; }
-    header nav { display:flex; gap:4px; margin-left:12px; }
-    header nav a { color:var(--muted); text-decoration:none; font-size:12px; padding:4px 10px; border-radius:4px; }
-    header nav a:hover, header nav a.active { color:var(--text); background:var(--border); }
-    main { max-width:900px; margin:0 auto; padding:24px 16px; }
-    .proposal-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:10px; transition:border-color 0.15s; }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; justify-content:space-between; }
+    header h1 { font-size:16px; font-weight:600; }
+    main { max-width:860px; margin:0 auto; padding:24px 16px; }
+    .proposal-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px 20px; margin-bottom:10px; transition:border-color 0.15s; display:flex; justify-content:space-between; align-items:center; }
     .proposal-card:hover { border-color:var(--accent); }
-    .proposal-card h3 { font-size:14px; margin-bottom:6px; }
+    .proposal-card .left { flex:1; min-width:0; }
+    .proposal-card h3 { font-size:14px; margin-bottom:4px; }
     .proposal-card h3 a { color:var(--accent); text-decoration:none; }
-    .proposal-card .meta { font-size:11px; color:var(--muted); display:flex; gap:12px; align-items:center; }
-    .badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:600; }
-    .badge-draft { background:#1a2332; color:var(--accent); }
+    .proposal-card .meta { font-size:11px; color:var(--muted); display:flex; gap:10px; align-items:center; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; white-space:nowrap; }
+    .badge-processing { background:#1a2332; color:var(--accent); animation:pulse 1.5s infinite; }
     .badge-review { background:#2e2416; color:var(--yellow); }
     .badge-approved { background:#1a2e1a; color:var(--green); }
     .badge-implemented { background:#1a1a2e; color:var(--purple); }
     .badge-rejected { background:#3d1e1e; color:var(--red); }
-    .detail-header { margin-bottom:20px; }
-    .detail-header h2 { font-size:18px; margin-bottom:8px; }
-    .detail-body { white-space:pre-wrap; font-size:13px; line-height:1.6; margin-bottom:24px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
-    .status-bar { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
-    .btn { display:inline-flex; align-items:center; gap:4px; padding:5px 12px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .btn { display:inline-flex; align-items:center; gap:4px; padding:6px 14px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; cursor:pointer; }
     .btn:hover { background:var(--border); }
-    .btn-active { background:#1f6feb; border-color:#1f6feb; color:white; }
-    .comment { border-top:1px solid var(--border); padding:10px 0; }
-    .comment .author { font-weight:600; font-size:12px; margin-bottom:4px; }
-    .comment .body { font-size:13px; white-space:pre-wrap; }
-    .comment .time { font-size:10px; color:var(--muted); margin-top:4px; }
-    .comment-form { display:flex; gap:8px; margin-top:16px; }
-    .comment-form input { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:6px 10px; color:var(--text); font-size:12px; }
-    .empty { text-align:center; color:var(--muted); padding:40px 0; }
+    .btn-primary { background:#1f6feb; border-color:#1f6feb; color:white; }
+    .btn-primary:hover { background:#388bfd; }
+    .empty { text-align:center; color:var(--muted); padding:60px 20px; }
+    .empty h2 { font-size:18px; margin-bottom:8px; color:var(--text); }
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; }
     .modal-overlay.active { display:flex; }
-    .modal { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px; max-width:500px; width:90%; }
-    .modal h3 { margin-bottom:12px; }
-    .modal .field { margin-bottom:10px; }
-    .modal .field label { display:block; font-size:10px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; }
-    .modal .field input, .modal .field textarea, .modal .field select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:6px 8px; color:var(--text); font-size:12px; font-family:inherit; }
-    .modal .field textarea { min-height:80px; resize:vertical; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:24px; max-width:520px; width:90%; }
+    .modal h3 { margin-bottom:14px; font-size:15px; }
+    .field { margin-bottom:12px; }
+    .field label { display:block; font-size:10px; color:var(--muted); margin-bottom:3px; text-transform:uppercase; }
+    .field input, .field textarea, .field select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:7px 10px; color:var(--text); font-size:13px; font-family:inherit; }
+    .field textarea { min-height:90px; resize:vertical; }
   </style>
 </head>
 <body>
 <header>
   <h1>Proposals</h1>
+  <button class="btn btn-primary" onclick="document.getElementById('new-modal').classList.add('active')">+ New Proposal</button>
 </header>
 
 <main>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <span style="font-size:13px;color:var(--muted)">{{ proposals|length }} proposal{% if proposals|length != 1 %}s{% endif %}</span>
-    <button class="btn btn-active" onclick="document.getElementById('new-modal').classList.add('active')">+ New Proposal</button>
-  </div>
-
   {% if proposals %}
     {% for p in proposals %}
     <div class="proposal-card">
-      <h3><a href="/proposals/{{ p.id }}">{{ p.title }}</a></h3>
-      <div class="meta">
-        <span class="badge badge-{{ p.status }}">{{ PROPOSAL_LABELS[p.status] }}</span>
-        <span>{{ p.board }}</span>
-        <span>{{ p.created_at|int }}</span>
-        {% if p.comments_count %}<span>{{ p.comments_count }} comments</span>{% endif %}
+      <div class="left">
+        <h3><a href="/proposals/{{ p.id }}">{{ p.title }}</a></h3>
+        <div class="meta">
+          <span class="badge badge-{{ p.status }}">{{ PROPOSAL_LABELS[p.status] }}</span>
+          <span>{{ p.board }}</span>
+          <span class="reltime" data-ts="{{ p.updated_at }}"></span>
+          {% if p.top_comments %}<span>{{ p.top_comments }} agent review{% if p.top_comments != 1 %}s{% endif %}</span>{% endif %}
+        </div>
       </div>
     </div>
     {% endfor %}
   {% else %}
-    <div class="empty">No proposals yet. Create one to start collaborating.</div>
+    <div class="empty">
+      <h2>No proposals yet</h2>
+      <p style="margin-bottom:16px">Type what you want built and agents will review it.</p>
+      <button class="btn btn-primary" onclick="document.getElementById('new-modal').classList.add('active')">+ New Proposal</button>
+    </div>
   {% endif %}
 </main>
 
 <div class="modal-overlay" id="new-modal">
   <div class="modal">
     <h3>New Proposal</h3>
-    <form hx-post="/api/proposals" hx-on::after-request="location.reload()">
-      <div class="field"><label>Title</label><input name="title" required autofocus></div>
-      <div class="field"><label>Description</label><textarea name="body" rows="4"></textarea></div>
-      <div class="field"><label>Board</label><input name="board" value="default"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+    <form action="/api/proposals" method="post" onsubmit="setTimeout(()=>location.href='/proposals',200);return true">
+      <div class="field"><label>Title</label><input name="title" required autofocus placeholder="e.g. Add dark mode toggle"></div>
+      <div class="field"><label>Description</label><textarea name="body" rows="4" placeholder="What do you want built? Be specific..."></textarea></div>
+      <div class="field"><label>Project</label><input name="board" value="default" placeholder="default"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button type="button" class="btn" onclick="document.getElementById('new-modal').classList.remove('active')">Cancel</button>
-        <button type="submit" class="btn btn-active">Create</button>
+        <button type="submit" class="btn btn-primary">Create</button>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+function reltime(ts){const d=(Date.now()/1000)-ts;if(d<60)return'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+document.querySelectorAll('.reltime').forEach(e=>{e.textContent=reltime(parseInt(e.dataset.ts));});
+</script>
 </body>
 </html>

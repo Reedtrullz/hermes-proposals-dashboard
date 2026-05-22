@@ -9,99 +9,80 @@
     :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --yellow:#d2991d; --red:#f85149; --purple:#a371f7; }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-    header { background:var(--surface); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; gap:12px; }
-    header h1 { font-size:15px; font-weight:600; }
-    header nav { display:flex; gap:4px; margin-left:12px; }
-    header nav a { color:var(--muted); text-decoration:none; font-size:12px; padding:4px 10px; border-radius:4px; }
-    header nav a:hover, header nav a.active { color:var(--text); background:var(--border); }
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:16px; }
+    header h1 { font-size:16px; font-weight:600; }
     main { max-width:800px; margin:0 auto; padding:24px 16px; }
     .back { color:var(--muted); text-decoration:none; font-size:12px; margin-bottom:16px; display:inline-block; }
-    .detail-header { margin-bottom:16px; }
-    .detail-header h2 { font-size:18px; margin-bottom:6px; }
-    .detail-header .meta { font-size:11px; color:var(--muted); display:flex; gap:10px; align-items:center; }
-    .badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:600; }
-    .badge-draft { background:#1a2332; color:var(--accent); }
+    .detail-header { margin-bottom:20px; }
+    .detail-header h2 { font-size:20px; margin-bottom:6px; }
+    .detail-header .meta { font-size:12px; color:var(--muted); display:flex; gap:10px; align-items:center; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; }
+    .badge-processing { background:#1a2332; color:var(--accent); animation:pulse 1.5s infinite; }
     .badge-review { background:#2e2416; color:var(--yellow); }
     .badge-approved { background:#1a2e1a; color:var(--green); }
     .badge-implemented { background:#1a1a2e; color:var(--purple); }
     .badge-rejected { background:#3d1e1e; color:var(--red); }
-    .detail-body { white-space:pre-wrap; font-size:13px; line-height:1.6; margin-bottom:20px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
-    .status-bar { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
-    .btn { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .detail-body { white-space:pre-wrap; font-size:14px; line-height:1.6; margin-bottom:20px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+    .status-bar { display:flex; gap:6px; margin-bottom:24px; flex-wrap:wrap; }
+    .btn { display:inline-flex; align-items:center; gap:4px; padding:5px 12px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; }
     .btn:hover { background:var(--border); }
     .btn-active { background:#1f6feb; border-color:#1f6feb; color:white; }
-    .btn-approve { background:#1a2e1a; border-color:var(--green); color:var(--green); }
+    .btn-approve { background:#1a2e1a; border-color:var(--green); color:var(--green); font-weight:600; }
     .btn-approve:hover { background:#2a4e2a; }
     .btn-reject { background:#3d1e1e; border-color:var(--red); color:var(--red); }
     .btn-reject:hover { background:#5d2e2e; }
-    .comments-section { margin-top:24px; }
-    .comments-section h3 { font-size:14px; margin-bottom:12px; }
-    .comment { border-top:1px solid var(--border); padding:10px 0; }
-    .comment .author { font-weight:600; font-size:12px; margin-bottom:4px; }
-    .comment .body { font-size:13px; white-space:pre-wrap; }
-    .comment .time { font-size:10px; color:var(--muted); margin-top:4px; }
-    .comment-form { display:flex; gap:8px; margin-top:16px; align-items:center; }
-    .comment-form input { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:6px 10px; color:var(--text); font-size:12px; }
-    .comment-form select { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:6px 8px; color:var(--text); font-size:11px; }
-    .no-comments { color:var(--muted); font-size:12px; text-align:center; padding:16px 0; }
+    .processing-bar { margin-bottom:24px; padding:14px 18px; background:var(--surface); border:1px solid var(--accent); border-radius:8px; display:flex; align-items:center; gap:10px; }
+    .processing-bar .spinner { width:14px; height:14px; border:2px solid var(--border); border-top:2px solid var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .comments-section h3 { font-size:14px; margin-bottom:16px; }
+    .thread { margin-bottom:16px; }
+    .comment { padding:12px 16px; border-radius:8px; margin-bottom:4px; position:relative; }
+    .thread > .comment { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--border); }
+    .comment .author-line { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+    .comment .author-name { font-weight:600; font-size:13px; }
+    .comment .author-badge { font-size:10px; color:var(--muted); background:var(--bg); padding:1px 6px; border-radius:4px; }
+    .comment .body { font-size:13px; line-height:1.6; white-space:pre-wrap; }
+    .comment .body code { background:var(--bg); padding:1px 5px; border-radius:3px; font-size:11px; }
+    .comment .body strong { font-weight:600; }
+    .comment .time { font-size:10px; color:var(--muted); margin-top:6px; }
+    .replies { margin-left:32px; margin-top:2px; }
+    .replies .comment { background:var(--bg); border:1px solid var(--border); }
+    .replies .comment .author-line { font-size:12px; }
+    .reply-form { margin-top:8px; margin-left:32px; display:none; }
+    .reply-form.active { display:flex; gap:6px; }
+    .reply-form input { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:5px 8px; color:var(--text); font-size:12px; }
+    .reply-form button { padding:5px 12px; border-radius:4px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; }
+    .reply-form button:hover { background:var(--border); }
+    .reply-toggle { font-size:10px; color:var(--muted); cursor:pointer; background:none; border:none; margin-top:4px; }
+    .reply-toggle:hover { color:var(--accent); }
   </style>
 </head>
 <body>
 <header>
   <h1>Proposals</h1>
+  <a href="/proposals" style="color:var(--muted);text-decoration:none;font-size:12px">← Back</a>
 </header>
 
 <main>
-  <a href="/proposals" class="back">← Back to proposals</a>
-
-  <div class="detail-header">
-    <h2>{{ proposal.title }}</h2>
-    <div class="meta">
-      <span class="badge badge-{{ proposal.status }}">{{ PROPOSAL_LABELS[proposal.status] }}</span>
-      <span>{{ proposal.board }}</span>
-      <span>by {{ proposal.author }}</span>
-    </div>
-  </div>
-
-  {% if proposal.body %}
-  <div class="detail-body">{{ proposal.body }}</div>
-  {% endif %}
-
-  <div class="status-bar">
-    {% for s in ["draft","review","approved","implemented","rejected"] %}
-    <button class="btn {% if proposal.status == s %}btn-active{% elif s == 'approved' %}btn-approve{% elif s == 'rejected' %}btn-reject{% endif %}"
-            hx-patch="/api/proposals/{{ proposal.id }}/status"
-            hx-vals='{"status":"{{ s }}"}'
-            hx-on::after-request="location.reload()">
-      {% if proposal.status == s %}● {% endif %}{{ PROPOSAL_LABELS[s] }}
-    </button>
-    {% endfor %}
-  </div>
-
-  <div class="comments-section">
-    <h3>Comments ({{ comments|length }})</h3>
-    {% if comments %}
-      {% for c in comments %}
-      <div class="comment">
-        <div class="author">{{ c.author }}</div>
-        <div class="body">{{ c.body }}</div>
-        <div class="time">{{ c.created_at|int }}</div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="no-comments">No comments yet. Agents will add their analysis here.</div>
-    {% endif %}
-
-    <form class="comment-form"
-          hx-post="/api/proposals/{{ proposal.id }}/comments"
-          hx-on::after-request="location.reload()">
-      <select name="author">
-        {% for p in profiles %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-      </select>
-      <input name="body" placeholder="Add agent comment..." required>
-      <button type="submit" class="btn btn-active">Post</button>
-    </form>
+  <div id="proposal-content" hx-get="/api/proposals/{{ proposal.id }}/fragment" hx-trigger="every 5s" hx-swap="outerHTML">
+    {% include "_proposal_detail_fragment.html" %}
   </div>
 </main>
+
+<script>
+function reltime(ts){const d=(Date.now()/1000)-ts;if(d<60)return'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+function md(s){return s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\n- (.+)/g,'\n<span style="display:block;margin-left:12px;margin-top:2px">• $1</span>');}
+function toggleReply(id){var f=document.getElementById('reply-'+id);f.classList.toggle('active');if(f.classList.contains('active'))f.querySelector('input').focus();}
+document.addEventListener('htmx:afterSettle',function(){
+  document.querySelectorAll('.reltime').forEach(e=>{e.textContent=reltime(parseInt(e.dataset.ts));});
+  document.querySelectorAll('.md-body').forEach(e=>{e.innerHTML=md(e.textContent);});
+});
+// trigger initial render
+window.addEventListener('load',function(){
+  document.querySelectorAll('.reltime').forEach(e=>{e.textContent=reltime(parseInt(e.dataset.ts));});
+  document.querySelectorAll('.md-body').forEach(e=>{e.innerHTML=md(e.textContent);});
+});
+</script>
 </body>
 </html>
