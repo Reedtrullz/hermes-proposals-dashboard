@@ -126,11 +126,14 @@
                 <h3>{{ agent.name }}</h3>
                 <p>{{ agent.role_title }}</p>
                 <p>{{ agent.provider }} / {{ agent.model_name }}</p>
+                {% set exec = agent.get('executor_type', 'hermes') %}
+                {% if exec != 'hermes' %}<p style="color:#58a6ff;font-size:11px">{{ exec }}</p>{% endif %}
               </div>
             </div>
             <div class="node-meta">
               <span class="badge badge-{{ agent.status }}">{{ agent.status }}</span>
               <span class="badge">{{ agent.manager_name or "top level" }}</span>
+              {% if exec != 'hermes' %}<span class="badge" style="background:#1a2332;color:#58a6ff;border:1px solid #1f6feb33">{{ exec }}</span>{% endif %}
             </div>
             <div class="node-meter meter"><span style="width:{{ agent.budget_percent }}%"></span></div>
             <p class="tiny muted" style="margin-top:6px">{{ money(agent.monthly_actual_spend_usd) }} / {{ money(agent.monthly_budget_usd) }}</p>

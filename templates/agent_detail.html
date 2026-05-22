@@ -23,9 +23,18 @@
       </div>
       {% if agent.purpose %}<p class="body" style="margin-top:12px">{{ agent.purpose }}</p>{% endif %}
       <p class="small muted" style="margin-top:8px">{{ agent.provider }} / {{ agent.model_name }}</p>
+      {% set exec = agent.get('executor_type', 'hermes') %}
+      <p class="small" style="margin-top:4px"><strong>Executor:</strong>
+        {% if exec == 'hermes' %}Hermes (native){% else %}<span class="badge" style="background:#1a2332;color:#58a6ff;border:1px solid #1f6feb33">{{ exec }}</span>{% endif %}
+      </p>
       <div class="small" style="margin-top:10px">This month: {{ money(agent.monthly_actual_spend_usd) }} / {{ money(agent.monthly_budget_usd) }}</div>
       <div class="meter"><span style="width:{% if agent.monthly_budget_usd %}{{ [100, (agent.monthly_actual_spend_usd / agent.monthly_budget_usd * 100)|round(0)]|min }}{% else %}0{% endif %}%"></span></div>
       <div class="small muted" style="margin-top:6px">All-time: {{ money(agent.actual_spend_usd) }} actual / {{ money(agent.estimated_spend_usd) }} estimated</div>
+      {% if agent.get('executor_type', 'hermes') != 'hermes' %}
+      <div class="small muted" style="margin-top:4px">
+        Executor spend (all-time): {{ money(agent.executor_spend_usd or 0) }}
+      </div>
+      {% endif %}
     </div>
 
     <div class="card">
@@ -100,6 +109,20 @@
             <div class="field"><label>Provider</label><input name="provider" value="{{ agent.provider }}"></div>
             <div class="field"><label>Model</label><input name="model_name" value="{{ agent.model_name }}"></div>
           </div>
+          <div class="form-grid">
+            <div class="field"><label>Executor</label>
+              <select name="executor_type">
+                {% set exec = agent.get('executor_type', 'hermes') %}
+                <option value="hermes" {% if exec == 'hermes' %}selected{% endif %}>Hermes (native)</option>
+                <option value="codex" {% if exec == 'codex' %}selected{% endif %}>Codex CLI</option>
+                <option value="claude-code" {% if exec == 'claude-code' %}selected{% endif %}>Claude Code CLI</option>
+                <option value="opencode" {% if exec == 'opencode' %}selected{% endif %}>OpenCode CLI</option>
+                <option value="agy" {% if exec == 'agy' %}selected{% endif %}>Antigravity CLI</option>
+                <option value="command-code" {% if exec == 'command-code' %}selected{% endif %}>Command Code CLI</option>
+                <option value="kilo" {% if exec == 'kilo' %}selected{% endif %}>Kilo Code CLI</option>
+              </select>
+            </div>
+          </div>
           <div class="field"><label>Allowed Tools</label><textarea name="tools_allowed">{{ agent.tools|join('\n') }}</textarea></div>
           <div class="field"><label>Monthly Budget USD</label><input name="monthly_budget_usd" type="number" step="0.01" value="{{ agent.monthly_budget_usd }}"></div>
           <button class="btn btn-primary">Save Agent</button>
@@ -114,6 +137,12 @@
           <div class="form-grid">
             <div class="field"><label>Provider</label><input name="provider" value="{{ agent.provider }}"></div>
             <div class="field"><label>Model</label><input name="model" value="{{ agent.model_name }}"></div>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label>Executor Type</label>
+              <input name="executor_type" value="{{ agent.get('executor_type', '') }}" readonly style="opacity:0.6">
+            </div>
+            <div class="field" style="visibility:hidden"></div>
           </div>
           <div class="form-grid">
             <div class="field"><label>Input Tokens</label><input name="input_tokens" type="number" value="0"></div>

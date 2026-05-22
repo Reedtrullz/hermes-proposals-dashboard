@@ -17,6 +17,10 @@
         </div>
         <p class="small" style="margin:8px 0">{{ agent.purpose }}</p>
         <div class="small muted">{{ agent.provider }} / {{ agent.model_name }}</div>
+        {% set exec = agent.get('executor_type', 'hermes') %}
+        {% if exec != 'hermes' %}
+        <div class="small" style="margin-top:4px"><span class="badge" style="background:#1a2332;color:#58a6ff;border:1px solid #1f6feb33">{{ exec }}</span></div>
+        {% endif %}
         <div class="small" style="margin-top:8px">This month: {{ money(agent.monthly_actual_spend_usd) }} / {{ money(agent.monthly_budget_usd) }}</div>
         <div class="meter"><span style="width:{% if agent.monthly_budget_usd %}{{ [100, (agent.spent_usd / agent.monthly_budget_usd * 100)|round(0)]|min }}{% else %}0{% endif %}%"></span></div>
         <div class="tiny muted" style="margin-top:4px">{{ agent.usage_record_count }} usage record{% if agent.usage_record_count != 1 %}s{% endif %} · All-time: {{ money(agent.actual_spend_usd) }}</div>
@@ -44,6 +48,19 @@
           <div class="form-grid">
             <div class="field"><label>Provider</label><input name="provider" value="manual"></div>
             <div class="field"><label>Model</label><input name="model_name" value="manual"></div>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label>Executor</label>
+              <select name="executor_type">
+                <option value="hermes">Hermes (native)</option>
+                <option value="codex">Codex CLI</option>
+                <option value="claude-code">Claude Code CLI</option>
+                <option value="opencode">OpenCode CLI</option>
+                <option value="agy">Antigravity CLI</option>
+                <option value="command-code">Command Code CLI</option>
+                <option value="kilo">Kilo Code CLI</option>
+              </select>
+            </div>
           </div>
           <div class="field"><label>Allowed Tools</label><textarea name="tools_allowed" placeholder="One tool per line"></textarea></div>
           <div class="field"><label>Monthly Budget USD</label><input name="monthly_budget_usd" type="number" step="0.01" value="0"></div>

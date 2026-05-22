@@ -15,6 +15,7 @@ HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
 HERMES_HOME.mkdir(parents=True, exist_ok=True)
 PROPOSALS_DB = HERMES_HOME / "proposals.db"
 TRIGGER_FILE = HERMES_HOME / "proposals_trigger"
+TRIGGER_EXECUTOR_FILE = HERMES_HOME / "proposals_trigger_executor"
 PROFILES_DIR = HERMES_HOME / "profiles"
 
 AUTH_URL = os.environ.get("AUTH_URL", "https://reidar.tech")
@@ -31,6 +32,16 @@ PROPOSAL_LABELS = {
 }
 RISK_LEVELS = ["low", "medium", "high", "critical"]
 AGENT_STATUSES = ["active", "paused", "disabled"]
+EXECUTOR_TYPES = ["hermes", "codex", "claude-code", "opencode", "agy", "command-code", "kilo"]
+EXECUTOR_LABELS = {
+    "hermes": "Hermes (native)",
+    "codex": "Codex CLI",
+    "claude-code": "Claude Code CLI",
+    "opencode": "OpenCode CLI",
+    "agy": "Antigravity CLI",
+    "command-code": "Command Code CLI",
+    "kilo": "Kilo Code CLI",
+}
 GOAL_STATUSES = ["planned", "active", "blocked", "done", "dropped"]
 GOAL_PRIORITIES = ["low", "medium", "high", "critical"]
 WORKFLOW_RUN_STATUSES = ["running", "completed", "failed", "paused"]
@@ -70,6 +81,7 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "gpt-4.1",
         "tools_allowed": ["comment", "create_goal", "create_card"],
         "monthly_budget_usd": 25,
+        "executor_type": "hermes",
     },
     "architect": {
         "name": "Architect",
@@ -80,6 +92,7 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "gpt-4.1",
         "tools_allowed": ["comment", "create_subtask", "handoff"],
         "monthly_budget_usd": 25,
+        "executor_type": "hermes",
     },
     "builder": {
         "name": "Builder",
@@ -90,6 +103,7 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "gpt-4.1",
         "tools_allowed": ["comment", "propose_patch"],
         "monthly_budget_usd": 50,
+        "executor_type": "hermes",
     },
     "reviewer": {
         "name": "Reviewer",
@@ -100,6 +114,7 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "gpt-4.1",
         "tools_allowed": ["comment", "request_changes", "handoff"],
         "monthly_budget_usd": 20,
+        "executor_type": "hermes",
     },
     "qa": {
         "name": "QA Agent",
@@ -110,6 +125,7 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "gpt-4.1",
         "tools_allowed": ["comment", "create_test_plan"],
         "monthly_budget_usd": 15,
+        "executor_type": "hermes",
     },
     "cost_controller": {
         "name": "Cost Controller",
@@ -120,6 +136,74 @@ AGENT_TEMPLATE_DEFS = {
         "model_name": "manual",
         "tools_allowed": ["comment", "request_approval"],
         "monthly_budget_usd": 10,
+        "executor_type": "hermes",
+    },
+    # --- CLI Delegator Templates ---
+    "codex_coder": {
+        "name": "Codex Coder",
+        "role_title": "Codex Delegator",
+        "purpose": "Delegates implementation to OpenAI Codex CLI in isolated worktrees.",
+        "system_prompt": "Delegate coding tasks to Codex CLI. Use 'codex exec --full-auto' for safe sandboxed one-shot tasks, 'codex exec --ask-for-approval never' for fully unattended. Never trust Codex self-report — always verify the diff and run tests independently. Spawn in an isolated worktree, review changes, run tests, report via kanban_complete.",
+        "provider": "openai",
+        "model_name": "gpt-5",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 75,
+        "executor_type": "codex",
+    },
+    "claude_coder": {
+        "name": "Claude Coder",
+        "role_title": "Claude Code Delegator",
+        "purpose": "Delegates implementation to Claude Code CLI in isolated worktrees.",
+        "system_prompt": "Delegate coding tasks to Claude Code CLI. Use 'claude -p' (print mode) for one-shot non-interactive tasks, 'claude -p --dangerously-skip-permissions --max-turns 20' for fully unattended. Spawn in an isolated worktree, review the diff, run tests, and report via kanban_complete.",
+        "provider": "anthropic",
+        "model_name": "claude-sonnet-4-6",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 75,
+        "executor_type": "claude-code",
+    },
+    "opencode_coder": {
+        "name": "OpenCode Coder",
+        "role_title": "OpenCode Delegator",
+        "purpose": "Delegates implementation to OpenCode CLI (provider-agnostic).",
+        "system_prompt": "Delegate coding tasks to OpenCode CLI. Use 'opencode run' for one-shot tasks, interactive PTY for multi-turn. Construct prompts with safety constraints, spawn in an isolated worktree, review the diff, run tests, and report via kanban_complete.",
+        "provider": "openrouter",
+        "model_name": "auto",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 75,
+        "executor_type": "opencode",
+    },
+    "agy_coder": {
+        "name": "Antigravity Coder",
+        "role_title": "Antigravity Delegator",
+        "purpose": "Delegates implementation to Google Antigravity CLI (agy).",
+        "system_prompt": "Delegate coding tasks to Antigravity CLI. Use 'agy exec' for one-shot, background PTY for long tasks. Construct prompts with safety constraints, spawn in an isolated worktree, review the diff, run tests, and report via kanban_complete.",
+        "provider": "google",
+        "model_name": "gemini-3-flash-preview",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 50,
+        "executor_type": "agy",
+    },
+    "commandcode_coder": {
+        "name": "CommandCode Coder",
+        "role_title": "Command Code Delegator",
+        "purpose": "Delegates implementation to Command Code CLI (cmd) with taste-1 style learning.",
+        "system_prompt": "Delegate coding tasks to Command Code CLI. Binary is 'cmd' (npm: command-code). Use 'cmd -p' for headless one-shot tasks, 'cmd -p --yolo' for fully unattended. Command Code learns coding style (taste-1) from accepts/rejects. Spawn in an isolated worktree, review the diff, run tests, and report via kanban_complete. Requires Node.js 20+.",
+        "provider": "openai",
+        "model_name": "gpt-5",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 75,
+        "executor_type": "command-code",
+    },
+    "kilo_coder": {
+        "name": "Kilo Coder",
+        "role_title": "Kilo Code Delegator",
+        "purpose": "Delegates implementation to Kilo Code CLI (kilo) — open source, 500+ models.",
+        "system_prompt": "Delegate coding tasks to Kilo Code CLI. Binary is 'kilo' (npm: @kilocode/cli). Use 'kilo run --auto' for autonomous CI/CD mode, 'kilo run' for one-shot. Fork of OpenCode, same config format. Spawn in an isolated worktree, review the diff, run tests, and report via kanban_complete. Apache-2.0 open source.",
+        "provider": "openrouter",
+        "model_name": "auto",
+        "tools_allowed": ["comment", "kanban_complete", "kanban_heartbeat", "kanban_block"],
+        "monthly_budget_usd": 75,
+        "executor_type": "kilo",
     },
 }
 
@@ -172,6 +256,26 @@ def safe_return_path(value: str | None, default: str) -> str:
     if value and value.startswith("/proposals"):
         return value
     return default
+
+
+def write_trigger_executor_meta(db: sqlite3.Connection, proposal_id: str) -> None:
+    """Write executor metadata alongside the trigger file so external consumers
+    know which CLI to spawn without parsing the trigger file format."""
+    proposal = row(db.execute("SELECT id, assigned_agent_id FROM proposals WHERE id=?", (proposal_id,)))
+    if not proposal or not proposal.get("assigned_agent_id"):
+        return
+    agent = row(db.execute("SELECT id, executor_type FROM agents WHERE id=?", (proposal["assigned_agent_id"],)))
+    if not agent:
+        return
+    executor_type = agent.get("executor_type", "hermes")
+    if executor_type == "hermes":
+        return  # native Hermes execution — no need to write extra metadata
+    TRIGGER_EXECUTOR_FILE.write_text(dumps({
+        "proposal_id": proposal_id,
+        "agent_id": agent["id"],
+        "executor_type": executor_type,
+        "executor_label": EXECUTOR_LABELS.get(executor_type, executor_type),
+    }))
 
 
 def get_profiles() -> list[str]:
@@ -346,6 +450,7 @@ def create_schema(db: sqlite3.Connection) -> None:
             system_prompt TEXT NOT NULL DEFAULT '',
             provider TEXT NOT NULL DEFAULT 'manual',
             model_name TEXT NOT NULL DEFAULT 'manual',
+            executor_type TEXT NOT NULL DEFAULT 'hermes',
             tools_allowed_json TEXT NOT NULL DEFAULT '[]',
             monthly_budget_usd REAL NOT NULL DEFAULT 0,
             manager_agent_id TEXT,
@@ -355,6 +460,7 @@ def create_schema(db: sqlite3.Connection) -> None:
         )
         """
     )
+    ensure_column(db, "agents", "executor_type", "TEXT NOT NULL DEFAULT 'hermes'")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS goals (
@@ -475,6 +581,7 @@ def create_schema(db: sqlite3.Connection) -> None:
         """
     )
     ensure_column(db, "usage_records", "actual_cost_usd", "REAL NOT NULL DEFAULT 0")
+    ensure_column(db, "usage_records", "executor_type", "TEXT NOT NULL DEFAULT ''")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS budgets (
@@ -563,9 +670,9 @@ def seed_defaults(db: sqlite3.Connection) -> None:
         db.execute(
             """
             INSERT OR IGNORE INTO agents
-            (id, name, role_title, purpose, system_prompt, provider, model_name, tools_allowed_json,
+            (id, name, role_title, purpose, system_prompt, provider, model_name, executor_type, tools_allowed_json,
              monthly_budget_usd, manager_agent_id, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
             """,
             (
                 agent_id,
@@ -575,6 +682,7 @@ def seed_defaults(db: sqlite3.Connection) -> None:
                 agent["system_prompt"],
                 agent["provider"],
                 agent["model_name"],
+                agent.get("executor_type", "hermes"),
                 dumps(agent["tools_allowed"]),
                 agent["monthly_budget_usd"],
                 manager_agent_id,
@@ -844,6 +952,26 @@ def proposal_context(db: sqlite3.Connection, proposal_id: str) -> dict[str, Any]
         "workflow_runs": rows(db.execute("SELECT wr.*, wt.name AS template_name FROM workflow_runs wr JOIN workflow_templates wt ON wt.id=wr.template_id WHERE wr.proposal_id=? ORDER BY wr.updated_at DESC", (proposal_id,))),
         "approvals": rows(db.execute("SELECT * FROM approval_requests WHERE entity_type='proposal' AND entity_id=? ORDER BY created_at DESC", (proposal_id,))),
         "budgets": budget_rows(db, "proposal", proposal_id),
+        "executor": get_executor_for_proposal(db, proposal_id),
+    }
+
+
+def get_executor_for_proposal(db: sqlite3.Connection, proposal_id: str) -> dict[str, Any] | None:
+    """Return executor routing info for a proposal's assigned agent, or None if native Hermes."""
+    proposal = row(db.execute("SELECT assigned_agent_id FROM proposals WHERE id=?", (proposal_id,)))
+    if not proposal or not proposal.get("assigned_agent_id"):
+        return None
+    agent = row(db.execute("SELECT id, name, executor_type FROM agents WHERE id=?", (proposal["assigned_agent_id"],)))
+    if not agent:
+        return None
+    executor_type = agent.get("executor_type", "hermes")
+    if executor_type == "hermes":
+        return None
+    return {
+        "agent_id": agent["id"],
+        "agent_name": agent["name"],
+        "executor_type": executor_type,
+        "executor_label": EXECUTOR_LABELS.get(executor_type, executor_type),
     }
 
 
@@ -997,6 +1125,15 @@ async def proposal_detail(request: Request, proposal_id: str):
     return templates.TemplateResponse(request=request, name="proposal_detail.html", context=template_context({**context, "profiles": get_profiles()}))
 
 
+@app.get("/api/proposals/{proposal_id}/executor")
+async def api_proposal_executor(proposal_id: str):
+    """Return executor routing info for external agent consumers.
+    Returns null/None if the assigned agent uses native Hermes execution."""
+    with db_connect() as db:
+        result = get_executor_for_proposal(db, proposal_id)
+    return {"proposal_id": proposal_id, "executor": result}
+
+
 @app.get("/api/proposals/{proposal_id}/fragment", response_class=HTMLResponse)
 async def proposal_fragment(request: Request, proposal_id: str):
     with db_connect() as db:
@@ -1007,15 +1144,17 @@ async def proposal_fragment(request: Request, proposal_id: str):
 
 
 @app.post("/api/proposals")
-async def create_proposal(title: str = Form(...), body: str = Form(""), board: str = Form("default")):
+async def create_proposal(title: str = Form(...), body: str = Form(""), board: str = Form("default"), assigned_agent_id: str = Form("")):
     pid = make_id("p")
     now = ts()
     with db_connect() as db:
         db.execute(
-            "INSERT INTO proposals (id,title,body,status,board,created_at,updated_at) VALUES (?,?,?,'processing',?,?,?)",
-            (pid, title, body, board, now, now),
+            "INSERT INTO proposals (id,title,body,status,board,assigned_agent_id,created_at,updated_at) VALUES (?,?,?,'processing',?,NULLIF(?, ''),?,?)",
+            (pid, title, body, board, assigned_agent_id, now, now),
         )
         create_event(db, "human", "user", "proposal", pid, "proposal_created", {"title": title, "board": board})
+        if assigned_agent_id:
+            write_trigger_executor_meta(db, pid)
         db.commit()
     TRIGGER_FILE.write_text(pid)
     return {"ok": True, "id": pid}
@@ -1033,6 +1172,8 @@ async def update_proposal_status(proposal_id: str, status: str = Form(...)):
         db.commit()
     if status == "approved":
         TRIGGER_FILE.write_text(f"APPROVED:{proposal_id}")
+        with db_connect() as db:
+            write_trigger_executor_meta(db, proposal_id)
     return {"ok": True}
 
 
@@ -1106,6 +1247,8 @@ async def update_proposal_metadata(
             "proposal_metadata_updated",
             {"goal_id": goal_id or None, "assigned_agent_id": assigned_agent_id or None, "risk_level": risk_level},
         )
+        if assigned_agent_id:
+            write_trigger_executor_meta(db, proposal_id)
         ensure_policy_approvals(db, proposal_id)
         db.commit()
     return RedirectResponse(f"/proposals/{proposal_id}", status_code=303)
@@ -1152,6 +1295,10 @@ async def agent_detail(request: Request, agent_id: str):
             return HTMLResponse("<h2>Not found</h2>", status_code=404)
         agent["tools"] = loads(agent.get("tools_allowed_json"), []) or []
         agent.update(agent_cost_summary(db, agent_id))
+        agent["executor_spend_usd"] = float(db.execute(
+            "SELECT COALESCE(SUM(actual_cost_usd),0) FROM usage_records WHERE scope_type='agent' AND scope_id=? AND executor_type!=''",
+            (agent_id,)
+        ).fetchone()[0] or 0)
         agent["spent_usd"] = agent["monthly_actual_spend_usd"]
         cards = enrich_proposals(db, "SELECT * FROM proposals WHERE assigned_agent_id=? ORDER BY updated_at DESC", (agent_id,))
         handoffs = rows(db.execute("SELECT h.*, fa.name AS from_agent, ta.name AS to_agent FROM agent_handoffs h LEFT JOIN agents fa ON fa.id=h.from_agent_id LEFT JOIN agents ta ON ta.id=h.to_agent_id WHERE h.from_agent_id=? OR h.to_agent_id=? ORDER BY h.created_at DESC", (agent_id, agent_id)))
@@ -1170,20 +1317,23 @@ async def create_agent(
     system_prompt: str = Form(""),
     provider: str = Form("manual"),
     model_name: str = Form("manual"),
+    executor_type: str = Form("hermes"),
     tools_allowed: str = Form(""),
     monthly_budget_usd: float = Form(0),
     manager_agent_id: str = Form(""),
     return_to: str = Form(""),
 ):
+    if executor_type not in EXECUTOR_TYPES:
+        return JSONResponse({"error": f"invalid executor_type: {executor_type}"}, status_code=400)
     agent_id = make_id("agent")
     now = ts()
     with db_connect() as db:
         db.execute(
             """
             INSERT INTO agents
-            (id,name,role_title,purpose,system_prompt,provider,model_name,tools_allowed_json,
+            (id,name,role_title,purpose,system_prompt,provider,model_name,executor_type,tools_allowed_json,
              monthly_budget_usd,manager_agent_id,status,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,NULLIF(?, ''),'active',?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,NULLIF(?, ''),'active',?,?)
             """,
             (
                 agent_id,
@@ -1193,6 +1343,7 @@ async def create_agent(
                 system_prompt,
                 provider,
                 model_name,
+                executor_type,
                 lines_to_json(tools_allowed),
                 monthly_budget_usd,
                 manager_agent_id,
@@ -1220,9 +1371,9 @@ async def create_agent_from_template(
         db.execute(
             """
             INSERT INTO agents
-            (id,name,role_title,purpose,system_prompt,provider,model_name,tools_allowed_json,
+            (id,name,role_title,purpose,system_prompt,provider,model_name,executor_type,tools_allowed_json,
              monthly_budget_usd,manager_agent_id,status,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,NULLIF(?, ''),'active',?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,NULLIF(?, ''),'active',?,?)
             """,
             (
                 agent_id,
@@ -1232,6 +1383,7 @@ async def create_agent_from_template(
                 template["system_prompt"],
                 template["provider"],
                 template["model_name"],
+                template.get("executor_type", "hermes"),
                 dumps(template["tools_allowed"]),
                 template["monthly_budget_usd"],
                 manager_agent_id,
@@ -1255,21 +1407,24 @@ async def update_agent(
     system_prompt: str = Form(""),
     provider: str = Form("manual"),
     model_name: str = Form("manual"),
+    executor_type: str = Form("hermes"),
     tools_allowed: str = Form(""),
     monthly_budget_usd: float = Form(0),
     manager_agent_id: str = Form(""),
     return_to: str = Form(""),
 ):
+    if executor_type not in EXECUTOR_TYPES:
+        return JSONResponse({"error": f"invalid executor_type: {executor_type}"}, status_code=400)
     now = ts()
     with db_connect() as db:
         db.execute(
             """
             UPDATE agents
-            SET name=?, role_title=?, purpose=?, system_prompt=?, provider=?, model_name=?,
+            SET name=?, role_title=?, purpose=?, system_prompt=?, provider=?, model_name=?, executor_type=?,
                 tools_allowed_json=?, monthly_budget_usd=?, manager_agent_id=NULLIF(?, ''), updated_at=?
             WHERE id=?
             """,
-            (name, role_title, purpose, system_prompt, provider, model_name, lines_to_json(tools_allowed), monthly_budget_usd, manager_agent_id, now, agent_id),
+            (name, role_title, purpose, system_prompt, provider, model_name, executor_type, lines_to_json(tools_allowed), monthly_budget_usd, manager_agent_id, now, agent_id),
         )
         create_event(db, "human", "user", "agent", agent_id, "agent_updated", {"name": name, "role_title": role_title})
         db.commit()
@@ -1761,6 +1916,7 @@ async def create_usage_record(
     estimated_cost_usd: float = Form(0),
     actual_cost_usd: float = Form(0),
     manual_note: str = Form(""),
+    executor_type: str = Form(""),
 ):
     usage_id = make_id("usage")
     now = ts()
@@ -1769,10 +1925,10 @@ async def create_usage_record(
             """
             INSERT INTO usage_records
             (id,scope_type,scope_id,provider,model,input_tokens,output_tokens,cached_tokens,
-             tool_call_count,estimated_cost_usd,actual_cost_usd,manual_note,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+             tool_call_count,estimated_cost_usd,actual_cost_usd,manual_note,executor_type,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (usage_id, scope_type, scope_id, provider, model, input_tokens, output_tokens, cached_tokens, tool_call_count, estimated_cost_usd, actual_cost_usd, manual_note, now),
+            (usage_id, scope_type, scope_id, provider, model, input_tokens, output_tokens, cached_tokens, tool_call_count, estimated_cost_usd, actual_cost_usd, manual_note, executor_type, now),
         )
         create_event(db, "human", "user", scope_type, scope_id, "usage_recorded", {"usage_id": usage_id, "estimated_cost_usd": estimated_cost_usd, "actual_cost_usd": actual_cost_usd})
         if scope_type == "proposal":

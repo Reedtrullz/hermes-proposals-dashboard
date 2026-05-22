@@ -17,6 +17,7 @@
               {% if proposal.goal %}Goal: <a class="link" href="/proposals/goals/{{ proposal.goal.id }}">{{ proposal.goal.title }}</a>{% endif %}
               {% if proposal.parent %} · Parent: <a class="link" href="/proposals/{{ proposal.parent.id }}">{{ proposal.parent.title }}</a>{% endif %}
               {% if proposal.agent %} · Agent: <a class="link" href="/proposals/agents/{{ proposal.agent.id }}">{{ proposal.agent.name }}</a>{% endif %}
+              {% if executor %}<span class="badge" style="margin-left:8px;background:#1a2332;color:#58a6ff;border:1px solid #1f6feb33" title="This agent delegates to {{ executor.executor_label }}">{{ executor.executor_type }}</span>{% endif %}
             </div>
           </div>
         </div>
