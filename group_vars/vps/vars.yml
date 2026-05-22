@@ -1,0 +1,8 @@
+domain: kanban.reidar.tech
+docker_image: ghcr.io/reedtrullz/hermes-kanban-dashboard:latest
+container_name: hermes-kanban-dashboard
+host_port: "8089"
+container_port: "8089"
+data_volume: hermes_kanban_data
+auth_url: https://reidar.tech
+caddyfile: /etc/caddy/Caddyfile

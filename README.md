@@ -32,6 +32,26 @@ docker compose up -d --build
 
 The compose setup stores SQLite and trigger-file state in the `hermes-data` volume mounted at `/data/hermes`.
 
+## VPS Deployment With Ansible
+
+This repo follows the neighboring `/Users/reidar/Projectos` deployment convention: root-level `ansible.cfg`, `inventory/hosts.yml`, `group_vars/vps/vars.yml`, and `ansible-playbook.yml`.
+
+This repo is set up for agentic Ansible use. The encrypted `group_vars/vps/vault.yml` can live with the project, while the local `.ansible-vault-pass` file is ignored by Git and lets agents run the playbook without prompting for a vault password.
+
+Prepare or rotate the encrypted secret:
+
+```bash
+ansible-vault edit group_vars/vps/vault.yml
+```
+
+Deploy:
+
+```bash
+ansible-playbook ansible-playbook.yml
+```
+
+The playbook pulls `ghcr.io/reedtrullz/hermes-kanban-dashboard:latest`, runs it on `127.0.0.1:8089`, persists `$HERMES_HOME` in the `hermes_kanban_data` Docker volume, checks `/health`, updates the `kanban.reidar.tech` Caddy block, and reloads Caddy. If the new container fails health checks and a previous image exists, it rolls back.
+
 ## Agent Operations Model
 
 - Cards: existing `/proposals` records, extended with goals, parent cards, assigned agents, acceptance criteria, risk, and manual cost.

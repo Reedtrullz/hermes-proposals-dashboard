@@ -668,6 +668,8 @@ init_db()
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/health":
+            return await call_next(request)
         if not HERMES_REQUIRE_AUTH:
             return await call_next(request)
         if request.headers.get("X-Hermes-Key") == HERMES_API_KEY:
@@ -683,6 +685,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(title="Hermes Agent Operations Dashboard")
 app.add_middleware(AuthMiddleware)
+
+
+@app.get("/health")
+async def health():
+    try:
+        with db_connect() as db:
+            db.execute("SELECT 1").fetchone()
+        return {"status": "healthy", "database": "ok"}
+    except sqlite3.Error as exc:
+        return JSONResponse({"status": "unhealthy", "database": str(exc)}, status_code=503)
 
 
 @app.get("/", response_class=RedirectResponse)

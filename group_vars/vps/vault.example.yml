@@ -1,0 +1,3 @@
+# Copy to group_vars/vps/vault.yml, set the real value, then encrypt it:
+# ansible-vault encrypt group_vars/vps/vault.yml
+vault_hermes_api_key: replace-with-a-long-random-secret

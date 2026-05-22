@@ -34,6 +34,16 @@ def test_migrates_existing_proposals_schema(tmp_path, monkeypatch):
         assert db.execute("SELECT COUNT(*) AS n FROM approval_policies").fetchone()["n"] == 3
 
 
+def test_health_endpoint_bypasses_auth(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy", "database": "ok"}
+
+
 def test_existing_card_api_and_agent_goal_linking(tmp_path, monkeypatch):
     main = load_main(tmp_path, monkeypatch)
     client = TestClient(main.app)

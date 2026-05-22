@@ -1,0 +1,138 @@
+- name: Deploy Hermes Kanban Dashboard to VPS
+  hosts: vps
+  gather_facts: false
+  vars:
+    image_tag: "{{ lookup('env', 'GITHUB_SHA') | default(lookup('pipe', 'git -C ' ~ playbook_dir ~ ' rev-parse --short HEAD 2>/dev/null || echo latest'), true) }}"
+
+  pre_tasks:
+    - name: Get current container image
+      community.docker.docker_container_info:
+        name: "{{ container_name }}"
+      register: current_container
+      ignore_errors: true
+
+    - name: Set previous image fact
+      set_fact:
+        previous_image: "{{ current_container.container.Config.Image if (current_container.container is defined and current_container.container) else 'none' }}"
+
+  tasks:
+    - name: Pull latest image from GHCR
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+        force_source: true
+
+    - name: Stop and remove existing container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+
+    - name: Start new container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ docker_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "127.0.0.1:{{ host_port }}:{{ container_port }}"
+        log_driver: json-file
+        log_options:
+          max-size: "10m"
+          max-file: "3"
+        healthcheck:
+          test:
+            - CMD-SHELL
+            - "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:{{ container_port }}/health', timeout=5).status == 200 else 1)\""
+          interval: 30s
+          timeout: 10s
+          retries: 3
+          start_period: 20s
+        env:
+          HERMES_HOME: /data/hermes
+          HERMES_REQUIRE_AUTH: "1"
+          HERMES_API_KEY: "{{ vault_hermes_api_key }}"
+          AUTH_URL: "{{ auth_url }}"
+          VERSION: "{{ image_tag }}"
+        volumes:
+          - "{{ data_volume }}:/data/hermes"
+
+    - name: Wait for application health endpoint
+      uri:
+        url: "http://127.0.0.1:{{ host_port }}/health"
+        return_content: true
+        timeout: 5
+      register: health_check
+      until: health_check is succeeded and health_check.json.status == "healthy"
+      retries: 12
+      delay: 5
+      failed_when: false
+
+    - name: Fail if application is not healthy and there is no previous image
+      fail:
+        msg: "Hermes health check failed: {{ health_check }}"
+      when:
+        - health_check is not succeeded or health_check.json.status != "healthy"
+        - previous_image == "none"
+
+    - name: Roll back to previous image on failure
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ previous_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "127.0.0.1:{{ host_port }}:{{ container_port }}"
+        log_driver: json-file
+        log_options:
+          max-size: "10m"
+          max-file: "3"
+        env:
+          HERMES_HOME: /data/hermes
+          HERMES_REQUIRE_AUTH: "1"
+          HERMES_API_KEY: "{{ vault_hermes_api_key }}"
+          AUTH_URL: "{{ auth_url }}"
+        volumes:
+          - "{{ data_volume }}:/data/hermes"
+      when:
+        - health_check is not succeeded or health_check.json.status != "healthy"
+        - previous_image != "none"
+      register: rollback
+
+    - name: Fail with rollback message
+      fail:
+        msg: "Deployment failed; rolled back to {{ previous_image }}"
+      when: rollback.changed | default(false)
+
+    - name: Ensure Caddy config includes Hermes dashboard
+      become: true
+      blockinfile:
+        path: "{{ caddyfile }}"
+        marker: "# {mark} ANSIBLE MANAGED - Hermes Kanban Dashboard"
+        block: |
+          {{ domain }} {
+            reverse_proxy localhost:{{ host_port }}
+          }
+        create: false
+        mode: "0644"
+      register: caddy_update
+
+    - name: Validate Caddy config
+      become: true
+      command: "caddy validate --config {{ caddyfile }}"
+      changed_when: false
+
+    - name: Reload Caddy
+      become: true
+      systemd:
+        name: caddy
+        state: reloaded
+      when: caddy_update.changed
+
+    - name: Verify container is running
+      community.docker.docker_container_info:
+        name: "{{ container_name }}"
+      register: container_info
+
+    - name: Report deployment status
+      debug:
+        msg: "Hermes deployed: {{ container_info.container.State.Status }} -> https://{{ domain }}"

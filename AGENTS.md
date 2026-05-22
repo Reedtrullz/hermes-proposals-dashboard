@@ -8,6 +8,8 @@
 - Tests: `.venv/bin/python -m pytest -q`
 - Docker build: `docker build -t hermes-kanban-dashboard .`
 - Compose self-host: copy `.env.example` to `.env`, edit secrets, then `docker compose up -d --build`
+- Ansible syntax: `ansible-playbook ansible-playbook.yml --syntax-check`
+- VPS deploy: `ansible-playbook ansible-playbook.yml`
 
 ## Architecture
 - `main.py` is the FastAPI app, SQLite migration layer, route layer, seed data, and small data-access helpers.
@@ -34,3 +36,4 @@
 - Do not delete or repurpose `~/.hermes/proposals_trigger`; it is part of the existing agent loop.
 - Treat `deploy/inventory/hosts.yml` as operational configuration and avoid changing it unless the deployment target changes.
 - Do not hard-code provider API keys or add paid external services.
+- It is acceptable to keep the encrypted `group_vars/vps/vault.yml` with the project. Never commit `.ansible-vault-pass`; the local password file is intentionally ignored for agentic deploys.
