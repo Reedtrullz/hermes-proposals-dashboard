@@ -1251,6 +1251,34 @@ async def create_proposal(title: str = Form(...), body: str = Form(""), board: s
     return {"ok": True, "id": pid}
 
 
+@app.post("/api/proposals/dry-run")
+async def create_dry_run_proposal(agent_id: str = Form(...), return_to: str = Form("")):
+    with db_connect() as db:
+        agent = row(db.execute("SELECT id, name, executor_type FROM agents WHERE id=?", (agent_id,)))
+        if not agent:
+            return JSONResponse({"error": "agent not found"}, status_code=404)
+        executor_type = agent.get("executor_type", "hermes")
+        if executor_type == "hermes":
+            return JSONResponse({"error": "agent uses native Hermes, no dry-run needed"}, status_code=400)
+
+    label = EXECUTOR_LABELS.get(executor_type, executor_type)
+    title = f"[DRY-RUN] Test {label} pipeline"
+    body = f"Dry-run verification for agent '{agent['name']}' ({executor_type}).\n\nThis card verifies the full pipeline: trigger file → executor spawn → diff review → test run.\n\nNo production changes should be made. Expected output: 'DRY_RUN_OK'."
+
+    pid = make_id("p")
+    now = ts()
+    with db_connect() as db:
+        db.execute(
+            "INSERT INTO proposals (id,title,body,status,board,assigned_agent_id,created_at,updated_at) VALUES (?,?,?,'processing','default',?,?,?)",
+            (pid, title, body, agent_id, now, now),
+        )
+        create_event(db, "human", "user", "proposal", pid, "dry_run_created", {"agent_id": agent_id, "executor_type": executor_type})
+        write_trigger_executor_meta(db, pid)
+        db.commit()
+    TRIGGER_FILE.write_text(pid)
+    return RedirectResponse(safe_return_path(return_to, f"/proposals/{pid}"), status_code=303)
+
+
 @app.patch("/api/proposals/{proposal_id}/status")
 async def update_proposal_status(proposal_id: str, status: str = Form(...)):
     if status not in PROPOSAL_STATUSES:

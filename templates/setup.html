@@ -62,13 +62,23 @@
     <div class="section-label">Agents</div>
     <div class="side-list">
       {% for agent in agents %}
-      <a class="side-row {% if selected_agent and selected_agent.id == agent.id %}is-active{% endif %}" href="/proposals/setup?view=org&agent_id={{ agent.id }}">
+      <div style="display:flex;align-items:center;gap:6px">
+      <a class="side-row {% if selected_agent and selected_agent.id == agent.id %}is-active{% endif %}" href="/proposals/setup?view=org&agent_id={{ agent.id }}" style="flex:1;min-width:0">
         <span class="side-row-main">
           <span class="dot dot-{{ agent.status }}"></span>
           <span class="side-row-text"><strong>{{ agent.name }}</strong><span>{{ agent.role_title }}</span></span>
         </span>
         <span class="tiny muted">{{ agent.status }}</span>
       </a>
+      {% set exec = agent.get('executor_type', 'hermes') %}
+      {% if exec != 'hermes' %}
+      <form action="/api/proposals/dry-run" method="post" style="margin:0;flex:0 0 auto">
+        <input type="hidden" name="agent_id" value="{{ agent.id }}">
+        <input type="hidden" name="return_to" value="/proposals/setup?view=org&agent_id={{ agent.id }}">
+        <button class="btn btn-sm" title="Create a test card to verify the {{ exec }} pipeline" style="font-size:11px;padding:3px 8px">Test</button>
+      </form>
+      {% endif %}
+      </div>
       {% endfor %}
     </div>
 
