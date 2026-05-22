@@ -60,6 +60,69 @@ AGENT_COLORS = {
     "cost": "#f85149",
 }
 
+AGENT_TEMPLATE_DEFS = {
+    "product_lead": {
+        "name": "Product Lead",
+        "role_title": "Product Strategist",
+        "purpose": "Turns goals into epics and acceptance criteria.",
+        "system_prompt": "Clarify outcomes, create structured backlog, and avoid code changes.",
+        "provider": "openai",
+        "model_name": "gpt-4.1",
+        "tools_allowed": ["comment", "create_goal", "create_card"],
+        "monthly_budget_usd": 25,
+    },
+    "architect": {
+        "name": "Architect",
+        "role_title": "Technical Architect",
+        "purpose": "Breaks goals into implementation plans and risks.",
+        "system_prompt": "Produce pragmatic plans, dependencies, and risks.",
+        "provider": "openai",
+        "model_name": "gpt-4.1",
+        "tools_allowed": ["comment", "create_subtask", "handoff"],
+        "monthly_budget_usd": 25,
+    },
+    "builder": {
+        "name": "Builder",
+        "role_title": "Implementation Agent",
+        "purpose": "Implements approved tasks and reports changes.",
+        "system_prompt": "Work in small reviewed changes and ask for approval before risky operations.",
+        "provider": "openai",
+        "model_name": "gpt-4.1",
+        "tools_allowed": ["comment", "propose_patch"],
+        "monthly_budget_usd": 50,
+    },
+    "reviewer": {
+        "name": "Reviewer",
+        "role_title": "Code Reviewer",
+        "purpose": "Reviews output for quality, risks, and acceptance criteria.",
+        "system_prompt": "Prioritize bugs, regressions, and missing tests.",
+        "provider": "openai",
+        "model_name": "gpt-4.1",
+        "tools_allowed": ["comment", "request_changes", "handoff"],
+        "monthly_budget_usd": 20,
+    },
+    "qa": {
+        "name": "QA Agent",
+        "role_title": "Quality Analyst",
+        "purpose": "Creates test plans and validates acceptance criteria.",
+        "system_prompt": "Turn acceptance criteria into focused test scenarios.",
+        "provider": "openai",
+        "model_name": "gpt-4.1",
+        "tools_allowed": ["comment", "create_test_plan"],
+        "monthly_budget_usd": 15,
+    },
+    "cost_controller": {
+        "name": "Cost Controller",
+        "role_title": "Cost Controller",
+        "purpose": "Watches spend and flags runaway work.",
+        "system_prompt": "Warn on cost overruns and pause expensive loops.",
+        "provider": "manual",
+        "model_name": "manual",
+        "tools_allowed": ["comment", "request_approval"],
+        "monthly_budget_usd": 10,
+    },
+}
+
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
@@ -103,6 +166,12 @@ def lines_to_json(value: str | None) -> str:
 
 def json_to_lines(value: str | None) -> str:
     return "\n".join(loads(value, []) or [])
+
+
+def safe_return_path(value: str | None, default: str) -> str:
+    if value and value.startswith("/proposals"):
+        return value
+    return default
 
 
 def get_profiles() -> list[str]:
@@ -323,10 +392,14 @@ def create_schema(db: sqlite3.Connection) -> None:
             name TEXT NOT NULL,
             role_hint TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
+            assigned_agent_id TEXT,
+            handoff_agent_id TEXT,
             created_at INTEGER NOT NULL
         )
         """
     )
+    ensure_column(db, "workflow_template_stages", "assigned_agent_id", "TEXT")
+    ensure_column(db, "workflow_template_stages", "handoff_agent_id", "TEXT")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS workflow_runs (
@@ -352,6 +425,8 @@ def create_schema(db: sqlite3.Connection) -> None:
             position INTEGER NOT NULL,
             name TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
+            assigned_agent_id TEXT,
+            handoff_agent_id TEXT,
             started_at INTEGER,
             completed_at INTEGER,
             notes TEXT NOT NULL DEFAULT '',
@@ -360,6 +435,8 @@ def create_schema(db: sqlite3.Connection) -> None:
         """
     )
     ensure_column(db, "workflow_run_stages", "created_at", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(db, "workflow_run_stages", "assigned_agent_id", "TEXT")
+    ensure_column(db, "workflow_run_stages", "handoff_agent_id", "TEXT")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS agent_handoffs (
@@ -475,14 +552,14 @@ def create_schema(db: sqlite3.Connection) -> None:
 def seed_defaults(db: sqlite3.Connection) -> None:
     now = ts()
     agents = [
-        ("agent_product_lead", "Product Lead", "Product Strategist", "Turns goals into epics and acceptance criteria.", "Clarify outcomes, create structured backlog, and avoid code changes.", "openai", "gpt-4.1", ["comment", "create_goal", "create_card"], 25, None),
-        ("agent_architect", "Architect", "Technical Architect", "Breaks goals into implementation plans and risks.", "Produce pragmatic plans, dependencies, and risks.", "openai", "gpt-4.1", ["comment", "create_subtask", "handoff"], 25, "agent_product_lead"),
-        ("agent_builder", "Builder", "Implementation Agent", "Implements approved tasks and reports changes.", "Work in small reviewed changes and ask for approval before risky operations.", "openai", "gpt-4.1", ["comment", "propose_patch"], 50, "agent_architect"),
-        ("agent_reviewer", "Reviewer", "Code Reviewer", "Reviews output for quality, risks, and acceptance criteria.", "Prioritize bugs, regressions, and missing tests.", "openai", "gpt-4.1", ["comment", "request_changes", "handoff"], 20, "agent_architect"),
-        ("agent_qa", "QA Agent", "Quality Analyst", "Creates test plans and validates acceptance criteria.", "Turn acceptance criteria into focused test scenarios.", "openai", "gpt-4.1", ["comment", "create_test_plan"], 15, "agent_reviewer"),
-        ("agent_cost", "Cost Controller", "Cost Controller", "Watches spend and flags runaway work.", "Warn on cost overruns and pause expensive loops.", "manual", "manual", ["comment", "request_approval"], 10, None),
+        ("agent_product_lead", AGENT_TEMPLATE_DEFS["product_lead"], None),
+        ("agent_architect", AGENT_TEMPLATE_DEFS["architect"], "agent_product_lead"),
+        ("agent_builder", AGENT_TEMPLATE_DEFS["builder"], "agent_architect"),
+        ("agent_reviewer", AGENT_TEMPLATE_DEFS["reviewer"], "agent_architect"),
+        ("agent_qa", AGENT_TEMPLATE_DEFS["qa"], "agent_reviewer"),
+        ("agent_cost", AGENT_TEMPLATE_DEFS["cost_controller"], None),
     ]
-    for agent in agents:
+    for agent_id, agent, manager_agent_id in agents:
         db.execute(
             """
             INSERT OR IGNORE INTO agents
@@ -490,7 +567,20 @@ def seed_defaults(db: sqlite3.Connection) -> None:
              monthly_budget_usd, manager_agent_id, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
             """,
-            (*agent[:7], dumps(agent[7]), agent[8], agent[9], now, now),
+            (
+                agent_id,
+                agent["name"],
+                agent["role_title"],
+                agent["purpose"],
+                agent["system_prompt"],
+                agent["provider"],
+                agent["model_name"],
+                dumps(agent["tools_allowed"]),
+                agent["monthly_budget_usd"],
+                manager_agent_id,
+                now,
+                now,
+            ),
         )
 
     templates_data = [
@@ -616,6 +706,78 @@ def agent_cost_summary(db: sqlite3.Connection, agent_id: str) -> dict[str, float
         "estimated_spend_usd": float(assigned_estimated or 0) + usage_estimated,
         "usage_record_count": int(usage_count or 0),
     }
+
+
+def enrich_agents_for_setup(db: sqlite3.Connection) -> list[dict[str, Any]]:
+    agents = rows(
+        db.execute(
+            """
+            SELECT a.*, m.name AS manager_name
+            FROM agents a
+            LEFT JOIN agents m ON m.id=a.manager_agent_id
+            ORDER BY a.name
+            """
+        )
+    )
+    for agent in agents:
+        agent["tools"] = loads(agent.get("tools_allowed_json"), []) or []
+        agent.update(agent_cost_summary(db, agent["id"]))
+        monthly_budget = float(agent.get("monthly_budget_usd") or 0)
+        agent["budget_percent"] = min(100, round((float(agent["monthly_actual_spend_usd"] or 0) / monthly_budget) * 100, 2)) if monthly_budget else 0
+    return agents
+
+
+def build_org_levels(agents: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    by_id = {agent["id"]: agent for agent in agents}
+    children: dict[str | None, list[dict[str, Any]]] = {}
+    for agent in agents:
+        manager_id = agent.get("manager_agent_id")
+        if manager_id and manager_id not in by_id:
+            manager_id = None
+        children.setdefault(manager_id, []).append(agent)
+    for sibling_group in children.values():
+        sibling_group.sort(key=lambda item: (item.get("role_title") or "", item.get("name") or ""))
+
+    levels: list[list[dict[str, Any]]] = []
+    current = children.get(None, [])
+    visited: set[str] = set()
+    while current:
+        levels.append(current)
+        next_level: list[dict[str, Any]] = []
+        for agent in current:
+            visited.add(agent["id"])
+            next_level.extend(children.get(agent["id"], []))
+        current = [agent for agent in next_level if agent["id"] not in visited]
+
+    remaining = [agent for agent in agents if agent["id"] not in visited]
+    if remaining:
+        levels.append(remaining)
+    return levels
+
+
+def workflow_templates_for_setup(db: sqlite3.Connection) -> list[dict[str, Any]]:
+    templates_list = rows(db.execute("SELECT * FROM workflow_templates ORDER BY name"))
+    for template in templates_list:
+        template["stages"] = rows(
+            db.execute(
+                """
+                SELECT s.*, aa.name AS assigned_agent_name, ha.name AS handoff_agent_name
+                FROM workflow_template_stages s
+                LEFT JOIN agents aa ON aa.id=s.assigned_agent_id
+                LEFT JOIN agents ha ON ha.id=s.handoff_agent_id
+                WHERE s.template_id=?
+                ORDER BY s.position
+                """,
+                (template["id"],),
+            )
+        )
+    return templates_list
+
+
+def normalize_stage_positions(db: sqlite3.Connection, template_id: str) -> None:
+    stages = rows(db.execute("SELECT id FROM workflow_template_stages WHERE template_id=? ORDER BY position, created_at", (template_id,)))
+    for index, stage in enumerate(stages, 1):
+        db.execute("UPDATE workflow_template_stages SET position=? WHERE id=?", (index, stage["id"]))
 
 
 def budget_rows(db: sqlite3.Connection, scope_type: str | None = None, scope_id: str | None = None) -> list[dict[str, Any]]:
@@ -783,6 +945,47 @@ async def prefixed_approvals_page(request: Request):
 @app.get("/proposals/budgets", response_class=HTMLResponse)
 async def prefixed_budgets_page(request: Request):
     return await budgets_page(request)
+
+
+@app.get("/proposals/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    active_view = request.query_params.get("view", "org")
+    if active_view not in {"org", "workflow"}:
+        active_view = "org"
+    selected_agent_id = request.query_params.get("agent_id")
+    selected_template_id = request.query_params.get("template_id")
+    selected_stage_id = request.query_params.get("stage_id")
+
+    with db_connect() as db:
+        agents = enrich_agents_for_setup(db)
+        templates_list = workflow_templates_for_setup(db)
+
+    if not selected_agent_id and agents:
+        selected_agent_id = agents[0]["id"]
+    selected_agent = next((agent for agent in agents if agent["id"] == selected_agent_id), None)
+
+    if not selected_template_id and templates_list:
+        selected_template_id = templates_list[0]["id"]
+    selected_template = next((template for template in templates_list if template["id"] == selected_template_id), None)
+    selected_stage = None
+    if selected_template:
+        if not selected_stage_id and selected_template["stages"]:
+            selected_stage_id = selected_template["stages"][0]["id"]
+        selected_stage = next((stage for stage in selected_template["stages"] if stage["id"] == selected_stage_id), None)
+
+    context = {
+        "active_view": active_view,
+        "agents": agents,
+        "org_levels": build_org_levels(agents),
+        "agent_templates": AGENT_TEMPLATE_DEFS,
+        "selected_agent": selected_agent,
+        "templates_list": templates_list,
+        "selected_template": selected_template,
+        "selected_stage": selected_stage,
+        "return_to_org": f"/proposals/setup?view=org&agent_id={selected_agent_id or ''}",
+        "return_to_workflow": f"/proposals/setup?view=workflow&template_id={selected_template_id or ''}&stage_id={selected_stage_id or ''}",
+    }
+    return templates.TemplateResponse(request=request, name="setup.html", context=template_context(context))
 
 
 @app.get("/proposals/{proposal_id}", response_class=HTMLResponse)
@@ -970,6 +1173,7 @@ async def create_agent(
     tools_allowed: str = Form(""),
     monthly_budget_usd: float = Form(0),
     manager_agent_id: str = Form(""),
+    return_to: str = Form(""),
 ):
     agent_id = make_id("agent")
     now = ts()
@@ -998,7 +1202,47 @@ async def create_agent(
         )
         create_event(db, "human", "user", "agent", agent_id, "agent_created", {"name": name, "role_title": role_title})
         db.commit()
-    return RedirectResponse("/proposals/agents", status_code=303)
+    return RedirectResponse(safe_return_path(return_to, "/proposals/agents"), status_code=303)
+
+
+@app.post("/api/proposals/agents/from-template")
+async def create_agent_from_template(
+    template_key: str = Form(...),
+    manager_agent_id: str = Form(""),
+    return_to: str = Form(""),
+):
+    template = AGENT_TEMPLATE_DEFS.get(template_key)
+    if not template:
+        return JSONResponse({"error": "unknown agent template"}, status_code=404)
+    agent_id = make_id("agent")
+    now = ts()
+    with db_connect() as db:
+        db.execute(
+            """
+            INSERT INTO agents
+            (id,name,role_title,purpose,system_prompt,provider,model_name,tools_allowed_json,
+             monthly_budget_usd,manager_agent_id,status,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,NULLIF(?, ''),'active',?,?)
+            """,
+            (
+                agent_id,
+                template["name"],
+                template["role_title"],
+                template["purpose"],
+                template["system_prompt"],
+                template["provider"],
+                template["model_name"],
+                dumps(template["tools_allowed"]),
+                template["monthly_budget_usd"],
+                manager_agent_id,
+                now,
+                now,
+            ),
+        )
+        create_event(db, "human", "user", "agent", agent_id, "agent_created_from_template", {"template_key": template_key, "name": template["name"]})
+        db.commit()
+    default_return = f"/proposals/setup?view=org&agent_id={agent_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
 
 
 @app.post("/api/proposals/agents/{agent_id}")
@@ -1014,6 +1258,7 @@ async def update_agent(
     tools_allowed: str = Form(""),
     monthly_budget_usd: float = Form(0),
     manager_agent_id: str = Form(""),
+    return_to: str = Form(""),
 ):
     now = ts()
     with db_connect() as db:
@@ -1028,12 +1273,12 @@ async def update_agent(
         )
         create_event(db, "human", "user", "agent", agent_id, "agent_updated", {"name": name, "role_title": role_title})
         db.commit()
-    return RedirectResponse(f"/proposals/agents/{agent_id}", status_code=303)
+    return RedirectResponse(safe_return_path(return_to, f"/proposals/agents/{agent_id}"), status_code=303)
 
 
 @app.post("/api/proposals/agents/{agent_id}/status")
 @app.post("/api/agents/{agent_id}/status")
-async def update_agent_status(agent_id: str, status: str = Form(...)):
+async def update_agent_status(agent_id: str, status: str = Form(...), return_to: str = Form("")):
     if status not in AGENT_STATUSES:
         return JSONResponse({"error": "invalid status"}, status_code=400)
     now = ts()
@@ -1041,7 +1286,7 @@ async def update_agent_status(agent_id: str, status: str = Form(...)):
         db.execute("UPDATE agents SET status=?, updated_at=? WHERE id=?", (status, now, agent_id))
         create_event(db, "human", "user", "agent", agent_id, "agent_status_changed", {"status": status})
         db.commit()
-    return RedirectResponse("/proposals/agents", status_code=303)
+    return RedirectResponse(safe_return_path(return_to, "/proposals/agents"), status_code=303)
 
 
 @app.get("/goals", response_class=HTMLResponse)
@@ -1151,12 +1396,128 @@ async def workflow_run_detail(request: Request, run_id: str):
         run = row(db.execute("SELECT wr.*, wt.name AS template_name, wt.description AS template_description, p.title AS proposal_title, g.title AS goal_title FROM workflow_runs wr JOIN workflow_templates wt ON wt.id=wr.template_id LEFT JOIN proposals p ON p.id=wr.proposal_id LEFT JOIN goals g ON g.id=wr.goal_id WHERE wr.id=?", (run_id,)))
         if not run:
             return HTMLResponse("<h2>Not found</h2>", status_code=404)
-        stages = rows(db.execute("SELECT * FROM workflow_run_stages WHERE run_id=? ORDER BY position", (run_id,)))
+        stages = rows(
+            db.execute(
+                """
+                SELECT s.*, aa.name AS assigned_agent_name, ha.name AS handoff_agent_name
+                FROM workflow_run_stages s
+                LEFT JOIN agents aa ON aa.id=s.assigned_agent_id
+                LEFT JOIN agents ha ON ha.id=s.handoff_agent_id
+                WHERE s.run_id=?
+                ORDER BY s.position
+                """,
+                (run_id,),
+            )
+        )
         agents = rows(db.execute("SELECT * FROM agents ORDER BY name"))
         handoffs = rows(db.execute("SELECT h.*, fa.name AS from_agent, ta.name AS to_agent FROM agent_handoffs h LEFT JOIN agents fa ON fa.id=h.from_agent_id LEFT JOIN agents ta ON ta.id=h.to_agent_id WHERE h.workflow_run_id=? ORDER BY h.created_at DESC", (run_id,)))
         approvals = rows(db.execute("SELECT * FROM approval_requests WHERE entity_type='workflow_run' AND entity_id=? ORDER BY created_at DESC", (run_id,)))
         events = entity_events(db, "workflow_run", run_id)
     return templates.TemplateResponse(request=request, name="workflow_run_detail.html", context=template_context({"run": run, "stages": stages, "agents": agents, "handoffs": handoffs, "approvals": approvals, "events": events}))
+
+
+@app.post("/api/proposals/workflow-templates")
+async def create_workflow_template(name: str = Form(...), description: str = Form(""), return_to: str = Form("")):
+    template_id = make_id("workflow")
+    now = ts()
+    with db_connect() as db:
+        db.execute(
+            "INSERT INTO workflow_templates (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (template_id, name, description, now, now),
+        )
+        create_event(db, "human", "user", "workflow_template", template_id, "workflow_template_created", {"name": name})
+        db.commit()
+    default_return = f"/proposals/setup?view=workflow&template_id={template_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
+
+
+@app.post("/api/proposals/workflow-templates/{template_id}")
+async def update_workflow_template(template_id: str, name: str = Form(...), description: str = Form(""), return_to: str = Form("")):
+    now = ts()
+    with db_connect() as db:
+        db.execute(
+            "UPDATE workflow_templates SET name=?, description=?, updated_at=? WHERE id=?",
+            (name, description, now, template_id),
+        )
+        create_event(db, "human", "user", "workflow_template", template_id, "workflow_template_updated", {"name": name})
+        db.commit()
+    default_return = f"/proposals/setup?view=workflow&template_id={template_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
+
+
+@app.post("/api/proposals/workflow-templates/{template_id}/stages")
+async def create_workflow_template_stage(
+    template_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    assigned_agent_id: str = Form(""),
+    handoff_agent_id: str = Form(""),
+    return_to: str = Form(""),
+):
+    stage_id = make_id("stage")
+    now = ts()
+    with db_connect() as db:
+        template = row(db.execute("SELECT id FROM workflow_templates WHERE id=?", (template_id,)))
+        if not template:
+            return JSONResponse({"error": "unknown workflow template"}, status_code=404)
+        position = db.execute("SELECT COALESCE(MAX(position), 0) + 1 AS next_position FROM workflow_template_stages WHERE template_id=?", (template_id,)).fetchone()["next_position"]
+        db.execute(
+            """
+            INSERT INTO workflow_template_stages
+            (id, template_id, position, name, role_hint, description, assigned_agent_id, handoff_agent_id, created_at)
+            VALUES (?, ?, ?, ?, '', ?, NULLIF(?, ''), NULLIF(?, ''), ?)
+            """,
+            (stage_id, template_id, position, name, description, assigned_agent_id, handoff_agent_id, now),
+        )
+        create_event(db, "human", "user", "workflow_template", template_id, "workflow_stage_created", {"stage_id": stage_id, "name": name})
+        db.commit()
+    default_return = f"/proposals/setup?view=workflow&template_id={template_id}&stage_id={stage_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
+
+
+@app.post("/api/proposals/workflow-template-stages/{stage_id}")
+async def update_workflow_template_stage(
+    stage_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    position: int = Form(1),
+    assigned_agent_id: str = Form(""),
+    handoff_agent_id: str = Form(""),
+    return_to: str = Form(""),
+):
+    with db_connect() as db:
+        stage = row(db.execute("SELECT template_id FROM workflow_template_stages WHERE id=?", (stage_id,)))
+        if not stage:
+            return JSONResponse({"error": "unknown workflow template stage"}, status_code=404)
+        template_id = stage["template_id"]
+        db.execute(
+            """
+            UPDATE workflow_template_stages
+            SET name=?, description=?, position=?, assigned_agent_id=NULLIF(?, ''), handoff_agent_id=NULLIF(?, '')
+            WHERE id=?
+            """,
+            (name, description, max(1, position), assigned_agent_id, handoff_agent_id, stage_id),
+        )
+        normalize_stage_positions(db, template_id)
+        create_event(db, "human", "user", "workflow_template", template_id, "workflow_stage_updated", {"stage_id": stage_id, "name": name})
+        db.commit()
+    default_return = f"/proposals/setup?view=workflow&template_id={template_id}&stage_id={stage_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
+
+
+@app.post("/api/proposals/workflow-template-stages/{stage_id}/delete")
+async def delete_workflow_template_stage(stage_id: str, return_to: str = Form("")):
+    with db_connect() as db:
+        stage = row(db.execute("SELECT template_id, name FROM workflow_template_stages WHERE id=?", (stage_id,)))
+        if not stage:
+            return JSONResponse({"error": "unknown workflow template stage"}, status_code=404)
+        template_id = stage["template_id"]
+        db.execute("DELETE FROM workflow_template_stages WHERE id=?", (stage_id,))
+        normalize_stage_positions(db, template_id)
+        create_event(db, "human", "user", "workflow_template", template_id, "workflow_stage_deleted", {"stage_id": stage_id, "name": stage["name"]})
+        db.commit()
+    default_return = f"/proposals/setup?view=workflow&template_id={template_id}"
+    return RedirectResponse(safe_return_path(return_to, default_return), status_code=303)
 
 
 @app.post("/api/proposals/workflows/start")
@@ -1182,10 +1543,21 @@ async def start_workflow(template_id: str = Form(...), proposal_id: str = Form("
             db.execute(
                 """
                 INSERT INTO workflow_run_stages
-                (id,run_id,template_stage_id,position,name,status,started_at,created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id,run_id,template_stage_id,position,name,status,assigned_agent_id,handoff_agent_id,started_at,created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (stage_id, run_id, stage["id"], stage["position"], stage["name"], "current" if index == 0 else "pending", now if index == 0 else None, now),
+                (
+                    stage_id,
+                    run_id,
+                    stage["id"],
+                    stage["position"],
+                    stage["name"],
+                    "current" if index == 0 else "pending",
+                    stage.get("assigned_agent_id"),
+                    stage.get("handoff_agent_id"),
+                    now if index == 0 else None,
+                    now,
+                ),
             )
         create_event(db, "human", "user", "workflow_run", run_id, "workflow_started", {"template_id": template_id, "proposal_id": proposal_id or None, "goal_id": goal_id or None})
         if proposal_id:

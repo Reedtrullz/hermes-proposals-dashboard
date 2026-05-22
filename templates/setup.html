@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Setup - Hermes{% endblock %}
+{% block head %}
+<style>
+  main { max-width:none; padding:0; }
+  .setup-shell { min-height:calc(100vh - 53px); display:grid; grid-template-columns:280px minmax(0,1fr) 360px; background:#050608; }
+  .setup-sidebar, .setup-inspector { border-color:#1f232a; background:#090b0f; padding:18px; overflow:auto; max-height:calc(100vh - 53px); }
+  .setup-sidebar { border-right:1px solid #1f232a; }
+  .setup-inspector { border-left:1px solid #1f232a; }
+  .setup-canvas-wrap { min-width:0; padding:18px; overflow:auto; }
+  .setup-canvas { position:relative; min-height:680px; border:1px solid #222831; border-radius:8px; background:#080a0d; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.015); overflow:auto; }
+  .setup-canvas-inner { position:relative; z-index:2; min-width:760px; min-height:640px; padding:76px 56px 56px; }
+  .setup-links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+  .setup-title { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:18px; }
+  .setup-title h2 { font-size:17px; }
+  .section-label { color:#686f7b; font-size:10px; letter-spacing:.13em; text-transform:uppercase; font-weight:750; margin:22px 0 9px; }
+  .side-list { display:grid; gap:6px; }
+  .side-row { color:var(--text); text-decoration:none; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-radius:6px; border:1px solid transparent; }
+  .side-row:hover, .side-row.is-active { background:#15181d; border-color:#282e37; }
+  .side-row-main { display:flex; align-items:center; gap:9px; min-width:0; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--accent); flex:0 0 auto; box-shadow:0 0 12px currentColor; }
+  .dot-paused { background:var(--purple); color:var(--purple); }
+  .dot-disabled { background:var(--red); color:var(--red); }
+  .side-row-text { min-width:0; }
+  .side-row-text strong { display:block; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .side-row-text span { display:block; color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .setup-tabs { position:absolute; left:18px; top:18px; display:flex; gap:6px; z-index:3; }
+  .setup-tabs a { color:var(--muted); text-decoration:none; font-size:12px; padding:7px 10px; border-radius:6px; border:1px solid #252b33; background:#0d1015; }
+  .setup-tabs a.is-active { color:white; border-color:#3b82f6; background:#14233b; }
+  .canvas-actions { position:absolute; right:18px; top:18px; z-index:3; display:flex; gap:8px; }
+  .icon-btn { width:32px; min-height:32px; padding:0; border-radius:6px; font-weight:800; }
+  .org-level { display:flex; justify-content:center; gap:42px; margin-bottom:80px; }
+  .agent-node, .workflow-node { display:block; color:var(--text); text-decoration:none; border:1px solid #262b32; background:#171a1f; border-radius:8px; box-shadow:0 12px 34px rgba(0,0,0,.28); }
+  .agent-node { width:250px; padding:18px; }
+  .workflow-node { width:220px; padding:16px; flex:0 0 auto; }
+  .agent-node:hover, .workflow-node:hover, .agent-node.is-active, .workflow-node.is-active { border-color:#3b82f6; background:#1c2027; }
+  .node-main { display:flex; gap:13px; align-items:center; }
+  .node-icon { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#272c35; color:#e6edf3; font-weight:800; position:relative; flex:0 0 auto; }
+  .node-icon .dot { position:absolute; right:0; bottom:2px; border:2px solid #171a1f; }
+  .node-text { min-width:0; }
+  .node-text h3 { font-size:15px; line-height:1.15; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node-text p { color:var(--muted); font-size:12px; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node-meta { margin-top:12px; display:flex; flex-wrap:wrap; gap:6px; }
+  .node-meter { margin-top:10px; }
+  .workflow-stage-row { display:flex; align-items:center; gap:58px; padding-top:110px; min-height:300px; }
+  #workflowCanvas { min-width:720px; padding:96px 32px 56px; }
+  #workflowCanvas .workflow-stage-row { gap:18px; padding-top:90px; }
+  #workflowCanvas .workflow-node { width:150px; }
+  .workflow-empty { padding-top:150px; text-align:center; color:var(--muted); }
+  .stage-position { width:28px; height:28px; border-radius:50%; background:#262b32; display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:800; margin-bottom:12px; }
+  .quick-form { border:1px solid #222831; border-radius:8px; background:#0d1015; padding:12px; display:grid; gap:8px; }
+  .quick-form select, .quick-form input, .quick-form textarea, .mini-input { width:100%; background:#050608; border:1px solid #272d36; border-radius:5px; padding:7px 9px; color:var(--text); font-size:12px; font-family:inherit; }
+  .inspector-block { border-bottom:1px solid #222831; padding-bottom:16px; margin-bottom:16px; }
+  .inspector-block h3 { font-size:15px; margin-bottom:10px; }
+  .setup-inspector .field input, .setup-inspector .field textarea, .setup-inspector .field select { background:#050608; border-color:#272d36; }
+  .setup-inspector .field textarea { min-height:74px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form-grid .wide { grid-column:1 / -1; }
+  @media (max-width:1100px) {
+    .setup-shell { grid-template-columns:230px minmax(0,1fr); }
+    .setup-inspector { grid-column:1 / -1; border-left:0; border-top:1px solid #1f232a; max-height:none; }
+  }
+  @media (max-width:760px) {
+    .setup-shell { grid-template-columns:1fr; }
+    .setup-sidebar, .setup-inspector { max-height:none; border-right:0; }
+    .setup-canvas-wrap { padding:12px; }
+    .setup-canvas-inner { min-width:680px; padding-left:28px; padding-right:28px; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="setup-shell">
+  <aside class="setup-sidebar">
+    <div class="setup-title">
+      <h2>Setup</h2>
+      <a class="btn icon-btn" href="/proposals/agents" title="Open agent list">+</a>
+    </div>
+
+    <div class="section-label">Agents</div>
+    <div class="side-list">
+      {% for agent in agents %}
+      <a class="side-row {% if selected_agent and selected_agent.id == agent.id %}is-active{% endif %}" href="/proposals/setup?view=org&agent_id={{ agent.id }}">
+        <span class="side-row-main">
+          <span class="dot dot-{{ agent.status }}"></span>
+          <span class="side-row-text"><strong>{{ agent.name }}</strong><span>{{ agent.role_title }}</span></span>
+        </span>
+        <span class="tiny muted">{{ agent.status }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="section-label">Create Agent</div>
+    <form class="quick-form" action="/api/proposals/agents/from-template" method="post">
+      <select name="template_key">
+        {% for key, template in agent_templates.items() %}
+        <option value="{{ key }}">{{ template.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="manager_agent_id">
+        <option value="">No manager</option>
+        {% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary">Create</button>
+    </form>
+
+    <div class="section-label">Workflows</div>
+    <div class="side-list">
+      {% for template in templates_list %}
+      <a class="side-row {% if selected_template and selected_template.id == template.id %}is-active{% endif %}" href="/proposals/setup?view=workflow&template_id={{ template.id }}">
+        <span class="side-row-text"><strong>{{ template.name }}</strong><span>{{ template.stages|length }} stages</span></span>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="section-label">Create Workflow</div>
+    <form class="quick-form" action="/api/proposals/workflow-templates" method="post">
+      <input name="name" placeholder="Workflow name" required>
+      <textarea name="description" placeholder="What this workflow coordinates"></textarea>
+      <button class="btn btn-primary">Create</button>
+    </form>
+  </aside>
+
+  <section class="setup-canvas-wrap">
+    <div class="setup-canvas" id="setupCanvas" data-view="{{ active_view }}">
+      <svg class="setup-links" id="setupLinks" aria-hidden="true"></svg>
+      <div class="setup-tabs">
+        <a class="{% if active_view == 'org' %}is-active{% endif %}" href="/proposals/setup?view=org{% if selected_agent %}&agent_id={{ selected_agent.id }}{% endif %}">Org</a>
+        <a class="{% if active_view == 'workflow' %}is-active{% endif %}" href="/proposals/setup?view=workflow{% if selected_template %}&template_id={{ selected_template.id }}{% endif %}">Workflow</a>
+      </div>
+      <div class="canvas-actions">
+        <a class="btn icon-btn" href="/proposals/setup?view={{ active_view }}" title="Fit canvas">Fit</a>
+      </div>
+
+      {% if active_view == 'org' %}
+      <div class="setup-canvas-inner" id="orgCanvas">
+        {% for level in org_levels %}
+        <div class="org-level">
+          {% for agent in level %}
+          <a class="agent-node {% if selected_agent and selected_agent.id == agent.id %}is-active{% endif %}" href="/proposals/setup?view=org&agent_id={{ agent.id }}" data-node="{{ agent.id }}" data-manager="{{ agent.manager_agent_id or '' }}">
+            <div class="node-main">
+              <div class="node-icon">{{ agent.role_title[:1] if agent.role_title else agent.name[:1] }}<span class="dot dot-{{ agent.status }}"></span></div>
+              <div class="node-text">
+                <h3>{{ agent.name }}</h3>
+                <p>{{ agent.role_title }}</p>
+                <p>{{ agent.provider }} / {{ agent.model_name }}</p>
+              </div>
+            </div>
+            <div class="node-meta">
+              <span class="badge badge-{{ agent.status }}">{{ agent.status }}</span>
+              <span class="badge">{{ agent.manager_name or "top level" }}</span>
+            </div>
+            <div class="node-meter meter"><span style="width:{{ agent.budget_percent }}%"></span></div>
+            <p class="tiny muted" style="margin-top:6px">{{ money(agent.monthly_actual_spend_usd) }} / {{ money(agent.monthly_budget_usd) }}</p>
+          </a>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="setup-canvas-inner" id="workflowCanvas">
+        {% if selected_template %}
+        <div class="workflow-stage-row">
+          {% for stage in selected_template.stages %}
+          <a class="workflow-node {% if selected_stage and selected_stage.id == stage.id %}is-active{% endif %}" href="/proposals/setup?view=workflow&template_id={{ selected_template.id }}&stage_id={{ stage.id }}" data-flow-node="{{ stage.id }}">
+            <div class="stage-position">{{ stage.position }}</div>
+            <div class="node-text">
+              <h3>{{ stage.name }}</h3>
+              <p>{{ stage.description or "No description yet" }}</p>
+            </div>
+            <div class="node-meta">
+              <span class="badge">{{ stage.assigned_agent_name or "unassigned" }}</span>
+              <span class="badge">{{ stage.handoff_agent_name or "no handoff" }}</span>
+            </div>
+          </a>
+          {% endfor %}
+          {% if not selected_template.stages %}
+          <div class="workflow-empty">No stages yet. Add one from the inspector.</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="workflow-empty">Create a workflow template to start.</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <aside class="setup-inspector">
+    {% if active_view == 'org' and selected_agent %}
+    <div class="inspector-block">
+      <h3>{{ selected_agent.name }}</h3>
+      <p class="small muted">{{ selected_agent.role_title }} · {{ selected_agent.provider }} / {{ selected_agent.model_name }}</p>
+    </div>
+    <form action="/api/proposals/agents/{{ selected_agent.id }}" method="post">
+      <input type="hidden" name="return_to" value="{{ return_to_org }}">
+      <div class="form-grid">
+        <div class="field"><label>Name</label><input name="name" value="{{ selected_agent.name }}" required></div>
+        <div class="field"><label>Role</label><input name="role_title" value="{{ selected_agent.role_title }}" required></div>
+        <div class="field wide"><label>Purpose</label><textarea name="purpose">{{ selected_agent.purpose }}</textarea></div>
+        <div class="field wide"><label>System Prompt</label><textarea name="system_prompt">{{ selected_agent.system_prompt }}</textarea></div>
+        <div class="field"><label>Provider</label><input name="provider" value="{{ selected_agent.provider }}"></div>
+        <div class="field"><label>Model</label><input name="model_name" value="{{ selected_agent.model_name }}"></div>
+        <div class="field wide"><label>Allowed Tools</label><textarea name="tools_allowed">{{ selected_agent.tools|join('\n') }}</textarea></div>
+        <div class="field"><label>Monthly Budget</label><input type="number" step="0.01" min="0" name="monthly_budget_usd" value="{{ selected_agent.monthly_budget_usd }}"></div>
+        <div class="field"><label>Manager</label><select name="manager_agent_id"><option value="">No manager</option>{% for agent in agents if agent.id != selected_agent.id %}<option value="{{ agent.id }}" {% if selected_agent.manager_agent_id == agent.id %}selected{% endif %}>{{ agent.name }}</option>{% endfor %}</select></div>
+      </div>
+      <button class="btn btn-primary">Save Agent</button>
+    </form>
+    <form action="/api/proposals/agents/{{ selected_agent.id }}/status" method="post" class="row" style="margin-top:12px">
+      <input type="hidden" name="return_to" value="{{ return_to_org }}">
+      {% for status in AGENT_STATUSES %}
+      <button class="btn {% if selected_agent.status == status %}btn-primary{% endif %}" name="status" value="{{ status }}">{{ status }}</button>
+      {% endfor %}
+    </form>
+    {% elif active_view == 'workflow' and selected_template %}
+    <div class="inspector-block">
+      <h3>{{ selected_template.name }}</h3>
+      <p class="small muted">{{ selected_template.stages|length }} stages</p>
+    </div>
+    <form action="/api/proposals/workflow-templates/{{ selected_template.id }}" method="post">
+      <input type="hidden" name="return_to" value="{{ return_to_workflow }}">
+      <div class="field"><label>Name</label><input name="name" value="{{ selected_template.name }}" required></div>
+      <div class="field"><label>Description</label><textarea name="description">{{ selected_template.description }}</textarea></div>
+      <button class="btn btn-primary">Save Workflow</button>
+    </form>
+    <div class="inspector-block" style="padding-top:16px">
+      <h3>Add Stage</h3>
+      <form action="/api/proposals/workflow-templates/{{ selected_template.id }}/stages" method="post">
+        <div class="field"><label>Name</label><input name="name" placeholder="Stage name" required></div>
+        <div class="field"><label>Description</label><textarea name="description"></textarea></div>
+        <div class="field"><label>Assigned Agent</label><select name="assigned_agent_id"><option value="">Unassigned</option>{% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Handoff Target</label><select name="handoff_agent_id"><option value="">No handoff</option>{% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}</select></div>
+        <button class="btn">Add Stage</button>
+      </form>
+    </div>
+    {% if selected_stage %}
+    <div class="inspector-block">
+      <h3>Edit Stage</h3>
+      <form action="/api/proposals/workflow-template-stages/{{ selected_stage.id }}" method="post">
+        <input type="hidden" name="return_to" value="{{ return_to_workflow }}">
+        <div class="field"><label>Name</label><input name="name" value="{{ selected_stage.name }}" required></div>
+        <div class="field"><label>Position</label><input type="number" min="1" name="position" value="{{ selected_stage.position }}"></div>
+        <div class="field"><label>Description</label><textarea name="description">{{ selected_stage.description }}</textarea></div>
+        <div class="field"><label>Assigned Agent</label><select name="assigned_agent_id"><option value="">Unassigned</option>{% for agent in agents %}<option value="{{ agent.id }}" {% if selected_stage.assigned_agent_id == agent.id %}selected{% endif %}>{{ agent.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Handoff Target</label><select name="handoff_agent_id"><option value="">No handoff</option>{% for agent in agents %}<option value="{{ agent.id }}" {% if selected_stage.handoff_agent_id == agent.id %}selected{% endif %}>{{ agent.name }}</option>{% endfor %}</select></div>
+        <button class="btn btn-primary">Save Stage</button>
+      </form>
+      <form action="/api/proposals/workflow-template-stages/{{ selected_stage.id }}/delete" method="post" style="margin-top:10px">
+        <input type="hidden" name="return_to" value="/proposals/setup?view=workflow&template_id={{ selected_template.id }}">
+        <button class="btn btn-danger">Delete Stage</button>
+      </form>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty">Select an agent or workflow to edit.</div>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+function drawSetupLinks() {
+  const canvas = document.getElementById('setupCanvas');
+  const svg = document.getElementById('setupLinks');
+  if (!canvas || !svg) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const width = canvas.scrollWidth;
+  const height = canvas.scrollHeight;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = '';
+
+  function centerFor(el, side) {
+    const r = el.getBoundingClientRect();
+    const x = r.left - canvasRect.left + canvas.scrollLeft + r.width / 2;
+    const top = r.top - canvasRect.top + canvas.scrollTop;
+    if (side === 'bottom') return [x, top + r.height];
+    if (side === 'top') return [x, top];
+    if (side === 'right') return [r.left - canvasRect.left + canvas.scrollLeft + r.width, top + r.height / 2];
+    return [r.left - canvasRect.left + canvas.scrollLeft, top + r.height / 2];
+  }
+
+  function path(points) {
+    const d = points.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ');
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('d', d);
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', '#2b313a');
+    el.setAttribute('stroke-width', '2');
+    svg.appendChild(el);
+  }
+
+  if (canvas.dataset.view === 'org') {
+    canvas.querySelectorAll('[data-node][data-manager]').forEach(child => {
+      const managerId = child.dataset.manager;
+      if (!managerId) return;
+      const parent = canvas.querySelector(`[data-node="${CSS.escape(managerId)}"]`);
+      if (!parent) return;
+      const a = centerFor(parent, 'bottom');
+      const b = centerFor(child, 'top');
+      const midY = a[1] + Math.max(26, (b[1] - a[1]) / 2);
+      path([a, [a[0], midY], [b[0], midY], b]);
+    });
+  } else {
+    const nodes = [...canvas.querySelectorAll('[data-flow-node]')];
+    for (let i = 0; i < nodes.length - 1; i += 1) {
+      const a = centerFor(nodes[i], 'right');
+      const b = centerFor(nodes[i + 1], 'left');
+      path([a, b]);
+    }
+  }
+}
+window.addEventListener('load', drawSetupLinks);
+window.addEventListener('resize', drawSetupLinks);
+document.addEventListener('htmx:afterSettle', drawSetupLinks);
+</script>
+{% endblock %}

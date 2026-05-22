@@ -19,7 +19,13 @@
         <tr><th>Stage</th><th>Status</th><th>Update</th></tr>
         {% for stage in stages %}
         <tr>
-          <td>{{ stage.position }}. {{ stage.name }}{% if stage.notes %}<div class="muted tiny">{{ stage.notes }}</div>{% endif %}</td>
+          <td>
+            {{ stage.position }}. {{ stage.name }}
+            <div class="tiny muted">
+              Owner: {{ stage.assigned_agent_name or "Unassigned" }}{% if stage.handoff_agent_name %} · Handoff: {{ stage.handoff_agent_name }}{% endif %}
+            </div>
+            {% if stage.notes %}<div class="muted tiny">{{ stage.notes }}</div>{% endif %}
+          </td>
           <td><span class="badge badge-{{ stage.status }}">{{ stage.status }}</span></td>
           <td>
             <form action="/api/proposals/workflows/runs/{{ run.id }}/stages/{{ stage.id }}" method="post" class="row">
