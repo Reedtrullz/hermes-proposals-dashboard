@@ -58,6 +58,9 @@ import http.client, urllib.parse
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        # Bypass for Hermes agent: internal API key
+        if request.headers.get("X-Hermes-Key") == os.environ.get("HERMES_API_KEY", "hermes-local"):
+            return await call_next(request)
         if request.url.path.startswith("/api/"):
             # API routes: check session token exists
             token = request.cookies.get("__Secure-next-auth.session-token") or request.cookies.get("next-auth.session-token")
