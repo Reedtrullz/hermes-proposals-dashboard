@@ -1064,18 +1064,43 @@ async def root():
 
 @app.get("/proposals", response_class=HTMLResponse)
 async def proposals_list(request: Request):
+    executor_filter = request.query_params.get("executor", "")
     with db_connect() as db:
-        proposals = enrich_proposals(
-            db,
-            """
-            SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-            FROM proposals p ORDER BY p.updated_at DESC LIMIT 100
-            """,
-        )
+        if executor_filter == "cli":
+            proposals = enrich_proposals(
+                db,
+                """
+                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
+                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
+                WHERE a.executor_type != 'hermes' ORDER BY p.updated_at DESC LIMIT 100
+                """,
+            )
+        elif executor_filter in EXECUTOR_TYPES:
+            proposals = enrich_proposals(
+                db,
+                """
+                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
+                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
+                WHERE a.executor_type = ? ORDER BY p.updated_at DESC LIMIT 100
+                """,
+                (executor_filter,),
+            )
+        else:
+            proposals = enrich_proposals(
+                db,
+                """
+                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
+                FROM proposals p ORDER BY p.updated_at DESC LIMIT 100
+                """,
+            )
         return templates.TemplateResponse(
             request=request,
             name="proposals_list.html",
-            context=template_context({"proposals": proposals, "profiles": get_profiles()}),
+            context=template_context({
+                "proposals": proposals,
+                "profiles": get_profiles(),
+                "executor_filter": executor_filter,
+            }),
         )
 
 

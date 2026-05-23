@@ -18,6 +18,50 @@
 - New "agent operations" records are local SQLite tables only. Agent runs, costs, handoffs, approvals, and audit events are records; this app does not call paid LLM providers.
 - `~/.hermes/proposals_trigger` is an existing integration point. New card creation writes the card id; approving a card writes `APPROVED:<id>`.
 
+## CLI Executor System (Multi-Provider Orchestration)
+
+The dashboard supports routing work to 7 different execution backends via the `executor_type` field on agents.
+
+### Agent executor types
+| Type | CLI Binary | Package | Headless Command |
+|------|-----------|---------|------------------|
+| `hermes` | (native) | — | Hermes agent loop |
+| `codex` | `codex` | `@openai/codex` | `codex exec --full-auto "prompt"` |
+| `claude-code` | `claude` | `@anthropic-ai/claude-code` | `claude -p "prompt"` |
+| `opencode` | `opencode` | `opencode-ai` | `opencode run "prompt"` |
+| `agy` | `agy` | Antigravity IDE | `agy exec "prompt"` |
+| `command-code` | `cmd` | `command-code` | `cmd -p "prompt"` |
+| `kilo` | `kilo` | `@kilocode/cli` | `kilo run --auto "prompt"` |
+
+Key gotcha: `command-code` npm package produces binary `cmd`, NOT `command-code`. `kilo` npm package is `@kilocode/cli`, binary is `kilo`.
+
+### Trigger files
+- `~/.hermes/proposals_trigger` — UNCHANGED. Contains card ID or `APPROVED:<id>`. Never repurpose.
+- `~/.hermes/proposals_trigger_executor` — JSON metadata written when a card's assigned agent has a non-hermes executor. Format: `{"proposal_id":"p_abc","agent_id":"agent_yyy","executor_type":"codex","executor_label":"Codex CLI"}`. Only exists for non-hermes executors.
+
+### Agent template keys
+12 templates: `product_lead`, `architect`, `builder`, `reviewer`, `qa`, `cost_controller` (hermes native), plus `codex_coder`, `claude_coder`, `opencode_coder`, `agy_coder`, `commandcode_coder`, `kilo_coder` (CLI delegators).
+
+### Key API endpoints
+- `GET /api/proposals/{id}/executor` — returns executor routing info or `null` for hermes agents
+- `GET /api/agents/{id}/executor-status` — JSON: checks if CLI binary is on PATH, runnable, returns version
+- `GET /api/agents/{id}/executor-status-ui` — HTML fragment: styled badge for htmx live verification
+- `POST /api/proposals/dry-run` — creates a `[DRY-RUN]` test proposal for a CLI agent, writes trigger files
+
+### Safety
+- `codex` and `command-code` executors auto-trigger a "Dangerous executor requires approval" policy (they have `--yolo`/`--dangerously-bypass` flags that can escape sandbox)
+- `command-code` requires Node.js 20+ — the agent detail page shows a warning if Node < 20 is detected
+
+### External agent loop integration
+The external Hermes agent loop should:
+1. Read `~/.hermes/proposals_trigger` for the card ID (as before)
+2. Read `~/.hermes/proposals_trigger_executor` if it exists
+3. If executor is non-hermes: spawn the appropriate CLI instead of a Hermes worker
+4. The CLI output is reconciled by the worker profile (see `kanban-codex-lane` skill for the pattern)
+5. After the CLI finishes, Hermes reviews the diff, runs tests, and calls `kanban_complete`
+
+See `docs/cli-executor-reference.md` for complete CLI installation and governance documentation.
+
 ## Style
 - Prefer small helper functions in `main.py` over new framework layers until the file becomes difficult to maintain.
 - Use idempotent SQLite migrations with `CREATE TABLE IF NOT EXISTS` and `ensure_column`.

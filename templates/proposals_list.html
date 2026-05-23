@@ -6,6 +6,21 @@
 <div class="panel-layout">
   <section>
     <p class="small muted" style="margin-bottom:16px">Kanban cards are the center of Hermes. Goals, agents, workflows, approvals, and costs attach here.</p>
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+      <span class="small muted">Filter:</span>
+      <select onchange="window.location=this.value" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 10px;color:var(--text);font-size:13px">
+        <option value="/proposals" {% if not executor_filter %}selected{% endif %}>All cards</option>
+        <option value="/proposals?executor=cli" {% if executor_filter == 'cli' %}selected{% endif %}>All CLI tasks</option>
+        <option disabled>──</option>
+        <option value="/proposals?executor=codex" {% if executor_filter == 'codex' %}selected{% endif %}>Codex CLI</option>
+        <option value="/proposals?executor=claude-code" {% if executor_filter == 'claude-code' %}selected{% endif %}>Claude Code CLI</option>
+        <option value="/proposals?executor=opencode" {% if executor_filter == 'opencode' %}selected{% endif %}>OpenCode CLI</option>
+        <option value="/proposals?executor=command-code" {% if executor_filter == 'command-code' %}selected{% endif %}>Command Code CLI</option>
+        <option value="/proposals?executor=kilo" {% if executor_filter == 'kilo' %}selected{% endif %}>Kilo Code CLI</option>
+        <option value="/proposals?executor=agy" {% if executor_filter == 'agy' %}selected{% endif %}>Antigravity CLI</option>
+      </select>
+      {% if executor_filter %}<span class="small muted">Showing {{ proposals|length }} result(s)</span>{% endif %}
+    </div>
     {% if proposals %}
       {% for p in proposals %}
       <div class="card">
