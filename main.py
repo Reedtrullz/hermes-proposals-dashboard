@@ -1237,6 +1237,37 @@ async def api_agent_executor_status(agent_id: str):
     }
 
 
+@app.get("/api/agents/executor-summary")
+async def api_agents_executor_summary():
+    """Return availability status for all CLI executor agents."""
+    with db_connect() as db:
+        agents = rows(db.execute("SELECT id, name, executor_type FROM agents WHERE executor_type != 'hermes' ORDER BY name"))
+
+    results = {}
+    for agent in agents:
+        et = agent["executor_type"]
+        if et not in results:
+            # Check once per executor type (shared binary)
+            BINARY_MAP = {
+                "codex": "codex", "claude-code": "claude", "opencode": "opencode",
+                "agy": "agy", "command-code": "cmd", "kilo": "kilo",
+            }
+            binary = BINARY_MAP.get(et)
+            if binary and shutil.which(binary):
+                try:
+                    subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=5)
+                    results[et] = "available"
+                except Exception:
+                    results[et] = "error"
+            else:
+                results[et] = "missing"
+
+    summary = [{"id": a["id"], "name": a["name"], "executor_type": a["executor_type"],
+                "status": results.get(a["executor_type"], "unknown")} for a in agents]
+    return {"agents": summary, "available_types": [et for et, s in results.items() if s == "available"],
+            "missing_types": [et for et, s in results.items() if s != "available"]}
+
+
 @app.get("/api/agents/{agent_id}/executor-status-ui", response_class=HTMLResponse)
 async def api_agent_executor_status_ui(agent_id: str):
     result = await api_agent_executor_status(agent_id)
@@ -1427,6 +1458,16 @@ async def agents_page(request: Request):
             agent.update(agent_cost_summary(db, agent["id"]))
             agent["spent_usd"] = agent["monthly_actual_spend_usd"]
             agent["budgets"] = budget_rows(db, "agent", agent["id"])
+        # Add executor availability for non-hermes agents
+        BINARY_MAP = {"codex":"codex","claude-code":"claude","opencode":"opencode",
+                      "agy":"agy","command-code":"cmd","kilo":"kilo"}
+        for agent in agents:
+            et = agent.get("executor_type", "hermes")
+            if et != "hermes":
+                binary = BINARY_MAP.get(et)
+                agent["executor_available"] = bool(binary and shutil.which(binary))
+            else:
+                agent["executor_available"] = True  # native always available
     return templates.TemplateResponse(request=request, name="agents.html", context=template_context({"agents": agents}))
 
 

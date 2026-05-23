@@ -14,6 +14,12 @@
             <p class="small muted">{{ agent.role_title }}</p>
           </div>
           <span class="badge badge-{{ agent.status }}">{{ agent.status }}</span>
+{% set exec = agent.get('executor_type', 'hermes') %}
+{% if exec != 'hermes' %}
+  <span class="dot" 
+        title="{% if agent.get('executor_available') %}{{ exec }} CLI available{% else %}{{ exec }} CLI not found on PATH{% endif %}"
+        style="display:inline-block;width:8px;height:8px;border-radius:50%;{% if agent.get('executor_available') %}background:#3fb950;box-shadow:0 0 4px #3fb95066{% else %}background:#f85149;box-shadow:0 0 4px #f8514966{% endif %}"></span>
+{% endif %}
         </div>
         <p class="small" style="margin:8px 0">{{ agent.purpose }}</p>
         <div class="small muted">{{ agent.provider }} / {{ agent.model_name }}</div>
