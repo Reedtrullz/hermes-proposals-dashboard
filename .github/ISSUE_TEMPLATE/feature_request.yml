@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose an improvement to proposal review, project planning, execution routing, or operation.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What becomes easier, safer, or clearer for a user or operator?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Describe the user flow or integration behavior you want.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Primary area
+      options:
+        - Projects and recommendations
+        - Proposals and review
+        - Worker and executor integration
+        - Workflows and handoffs
+        - Budgets and audit records
+        - Deployment and operations
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility or safety considerations
+      description: Note any effect on trigger files, APIs, auth, costs, external workers, or stored data.
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Product boundaries
+      options:
+        - label: This proposal keeps execution and AI-provider use explicit to the user, or explains why that boundary must change.
+          required: true

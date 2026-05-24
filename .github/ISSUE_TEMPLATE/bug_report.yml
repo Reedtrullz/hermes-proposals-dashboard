@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible problem in the dashboard, API, deployment, or worker integration.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include secrets, API keys, cookies, or private proposal content.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Proposals inbox or detail
+        - Projects or recommendations
+        - Reviews or workflows
+        - Agents, budgets, or settings
+        - Worker or executor integration
+        - API
+        - Docker or deployment
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and why it is incorrect.
+      placeholder: A newly submitted proposal remained on the form instead of opening its detail view.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run with HERMES_REQUIRE_AUTH=0 ...
+        2. Open /proposals ...
+        3. Submit ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include deployment mode, browser, Python/Docker version, and executor type where relevant. Redact secrets.
+      placeholder: Local Python 3.12, macOS, Safari, no external worker configured.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Add sanitized logs, screenshots, or relevant request/response details.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, cookies, private database contents, and provider keys from this report.
+          required: true

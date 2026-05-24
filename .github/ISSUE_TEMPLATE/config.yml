@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/Reedtrullz/hermes-proposals-dashboard/security
+    about: Report sensitive vulnerabilities privately instead of filing a public issue.
+  - name: Documentation
+    url: https://github.com/Reedtrullz/hermes-proposals-dashboard/tree/master/docs/wiki
+    about: Read setup, integration, and troubleshooting guidance first.

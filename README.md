@@ -1,32 +1,188 @@
 # Hermes Proposals Dashboard
 
-Hermes is a self-hosted, human-supervised operations dashboard built around proposals. The app adds goals, agents, workflows, reviews, budgets, manual cost tracking, and audit timelines.
+<div align="center">
 
-## Local Setup
+**A proposal-first control center for projects, human review, and externally executed AI work.**
+
+[Open Dashboard](https://reidar.tech/proposals) | [Product Overview](ABOUT.md) | [Documentation](docs/wiki/Home.md) | [Getting Started](docs/wiki/Getting-Started.md)
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-server--rendered-009688?logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-local--first-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-self--hosted-2496ED?logo=docker&logoColor=white)
+
+</div>
+
+Hermes Proposals Dashboard turns a stream of ideas and AI-assisted tasks into a reviewable operating system. Create projects, submit proposals, decide what should happen, route approved work to an external Hermes or CLI worker, and retain an audit trail of decisions, workflow state, and cost records.
+
+The dashboard is intentionally honest about execution: it stores and reviews work locally, but it does **not** silently run agents or call paid LLM providers. Real execution begins only when a separately configured worker consumes its trigger integration.
+
+## Why This Exists
+
+AI-assisted work needs a human-facing control surface:
+
+- Keep active initiatives visible as **Projects**, rather than losing work in chat histories.
+- Capture candidate work as **Proposals** with outcomes, criteria, risk, assignment, and cost context.
+- Surface the next useful action through local, explainable recommendations.
+- Require human review for important decisions and risky executor routes.
+- Let external workers execute accepted work while the dashboard remains the system of record.
+
+## Product Tour
+
+| Area | Purpose |
+| --- | --- |
+| **Projects** | List initiatives, group proposals, and show locally derived next-step recommendations. |
+| **Proposals** | Inbox for new work, waiting items, active work, reviews, and completed outcomes. |
+| **Reviews** | Approval decisions for proposals and workflow runs. |
+| **Workflows** | Reusable staged processes with handoffs and run history. |
+| **Settings** | Goals, agents, budgets, worker setup, and organization configuration. |
+| **Demo walkthrough** | Removable sample proposal and review flow; no worker is executed. |
+
+## First Five Minutes
 
 ```bash
+git clone https://github.com/Reedtrullz/hermes-proposals-dashboard.git
+cd hermes-proposals-dashboard
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 HERMES_REQUIRE_AUTH=0 .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8089 --reload
 ```
 
-Open `http://127.0.0.1:8089/proposals`.
+Open [http://127.0.0.1:8089/proposals](http://127.0.0.1:8089/proposals), then:
 
-The default SQLite database is `$HERMES_HOME/proposals.db`, or `~/.hermes/proposals.db` when `HERMES_HOME` is not set.
+1. Select **Try demo** to explore a proposal that safely needs a decision.
+2. Add a note, use **Approve** or **Request changes**, and remove the demo when done.
+3. Open **Projects** and create an initiative with a desired outcome.
+4. Submit a real proposal within that project. Its initial status is **Waiting for worker**.
+5. Open the project page to see next-step recommendations calculated from recorded state.
 
-If this repository directory is moved or renamed, recreate `.venv` before launching. Virtual environment console-script shebangs can retain the old absolute path; using `.venv/bin/python -m uvicorn` avoids that launcher issue.
+The default database and trigger files live under `$HERMES_HOME`; without configuration this is `~/.hermes`.
 
-## First Use
+## How It Works
 
-1. Open `/proposals/projects` and create projects for the initiatives you are working on.
-2. Open `/proposals` and select **Try demo** to open removable sample data. The demo never executes a worker.
-3. Review the sample proposal, add a note, and exercise **Approve** or **Request changes**.
-4. Select **Remove demo** on the demo detail page to delete only the sample records.
-5. Submit real proposals into a project. They are saved as **Waiting for worker**.
-6. Open a project to see locally calculated next-step recommendations. These are derived from stored status and decision data, not from an automatic model call.
-7. Configure an external Hermes or CLI worker before expecting live execution or deeper AI-assisted recommendations. A project can submit a planning proposal for that worker.
+```mermaid
+flowchart LR
+    Human["Human reviewer"] --> Projects["Projects and proposals"]
+    Projects --> Review["Review and approval"]
+    Projects --> Local["Local recommendations"]
+    Review --> Trigger["Trigger files"]
+    Trigger --> Worker["External Hermes or CLI worker"]
+    Worker --> Status["Status, notes, costs, audit trail"]
+    Status --> Projects
+```
 
-## Validation
+### Recommendations Versus AI Execution
+
+Project pages provide immediate recommendations such as resolving a pending decision or routing waiting work. These recommendations are deterministic and derived from SQLite state; they do not invoke a model.
+
+For deeper AI-assisted planning, select **Ask worker for recommendations** on a project. That creates a real waiting proposal using the existing trigger mechanism. A configured external worker may then analyze the project and return its recommendations through the normal review process.
+
+### Worker Trigger Contract
+
+Creating a real proposal writes its identifier to:
+
+```text
+$HERMES_HOME/proposals_trigger
+```
+
+Approving a real proposal writes:
+
+```text
+APPROVED:<proposal_id>
+```
+
+When a proposal is assigned to a non-Hermes executor, routing metadata is also written to:
+
+```text
+$HERMES_HOME/proposals_trigger_executor
+```
+
+Demo proposals never write execution triggers.
+
+## Core Capabilities
+
+- Proposal inbox with `Waiting for worker`, active review, decision, and completed views.
+- Project registry with desired outcomes, scoped proposals, costs, and recommended actions.
+- Safe demo workflow for first-run exploration.
+- Notes and review rendering that escapes untrusted markup.
+- Human approval policy for risky or costly proposals and failed workflows.
+- Agent records and seeded role templates, including CLI executor delegators.
+- Workflow templates, staged runs, explicit handoffs, and audit history.
+- Manual usage and budget records for agents, projects, proposals, workflows, and goals.
+- SQLite persistence with idempotent migrations and JSON-compatible proposal APIs.
+- Docker Compose and Ansible deployment paths for self-hosting.
+
+## Executor Support
+
+The dashboard can route proposals to native Hermes workers or to configured CLI delegates.
+
+| Executor | Binary | Intended route |
+| --- | --- | --- |
+| Hermes | Native integration | External Hermes worker loop |
+| Codex CLI | `codex` | `codex exec --full-auto` |
+| Claude Code | `claude` | `claude -p` |
+| OpenCode | `opencode` | `opencode run` |
+| Antigravity | `agy` | `agy exec` |
+| Command Code | `cmd` | `cmd -p` |
+| Kilo Code | `kilo` | `kilo run --auto` |
+
+The dashboard records routing information and safety approvals; the external worker owns spawning tools, reconciling output, and reporting completion. See [CLI Executor Reference](docs/cli-executor-reference.md).
+
+## Routes At A Glance
+
+| Surface | Route |
+| --- | --- |
+| Proposal inbox | `/proposals` |
+| Project overview | `/proposals/projects` |
+| Reviews | `/proposals/approvals` |
+| Workflows | `/proposals/workflows` |
+| Settings and worker guidance | `/proposals/settings` |
+| Health endpoint | `/health` |
+| JSON proposal API | `/api/proposals` |
+| Executor routing API | `/api/proposals/{id}/executor` |
+
+See [API and Integrations](docs/wiki/API-and-Integrations.md) for trigger formats and endpoint behavior.
+
+## Self-Hosting
+
+### Docker Compose
+
+```bash
+cp .env.example .env
+# Set HERMES_API_KEY and AUTH_URL before exposing the service.
+docker compose up -d --build
+```
+
+SQLite state and trigger files are persisted in the `hermes-data` volume mounted at `/data/hermes`.
+
+### VPS Deployment
+
+The included Ansible playbook deploys the GHCR image, persists `/data/hermes`, health-checks the application, and routes the dashboard through Caddy at:
+
+```text
+https://reidar.tech/proposals
+```
+
+```bash
+ansible-playbook ansible-playbook.yml --syntax-check
+ansible-playbook ansible-playbook.yml
+```
+
+Review [Deployment](docs/wiki/Deployment.md) before operating a hosted instance.
+
+## Security Model
+
+- Hosted deployments enable auth by default with `HERMES_REQUIRE_AUTH=1`.
+- Browser access is delegated through Auth.js cookie state and `AUTH_URL`.
+- API integrations may authenticate with `X-Hermes-Key: $HERMES_API_KEY`.
+- Local development may set `HERMES_REQUIRE_AUTH=0`; do not expose that configuration publicly.
+- The application stores operational information locally and does not hold LLM provider API keys.
+
+Security reporting guidance is in [SECURITY.md](SECURITY.md).
+
+## Development
+
+After moving or renaming the repository directory, recreate `.venv`. Virtual environment console scripts embed absolute paths; running the module via `.venv/bin/python -m uvicorn` avoids a stale launcher path.
 
 ```bash
 .venv/bin/python -m compileall -q main.py
@@ -34,50 +190,25 @@ If this repository directory is moved or renamed, recreate `.venv` before launch
 docker build -t hermes-proposals-dashboard .
 ```
 
-## Self-Hosting
+Tests isolate SQLite and trigger state under a temporary `HERMES_HOME`; never run tests against personal `~/.hermes` state.
 
-```bash
-cp .env.example .env
-# edit HERMES_API_KEY and AUTH_URL
-docker compose up -d --build
-```
+## Documentation
 
-The compose setup stores SQLite and trigger-file state in the `hermes-data` volume mounted at `/data/hermes`.
+| Guide | Read this when... |
+| --- | --- |
+| [About](ABOUT.md) | You want the product vision, principles, and scope. |
+| [Getting Started](docs/wiki/Getting-Started.md) | You are opening the dashboard for the first time. |
+| [Product Guide](docs/wiki/Product-Guide.md) | You need a tour of projects, proposals, reviews, and workflows. |
+| [Projects and Recommendations](docs/wiki/Projects-and-Recommendations.md) | You want to organize initiatives or understand suggestions. |
+| [Workers and Executors](docs/wiki/Workers-and-Executors.md) | You are wiring Hermes or CLI execution. |
+| [Architecture](docs/wiki/Architecture.md) | You need storage, lifecycle, and component boundaries. |
+| [API and Integrations](docs/wiki/API-and-Integrations.md) | You are building an external worker or API client. |
+| [Deployment](docs/wiki/Deployment.md) | You are self-hosting or deploying to the VPS. |
+| [Operations and Troubleshooting](docs/wiki/Operations-and-Troubleshooting.md) | A launch, auth, trigger, or status flow is unclear. |
+| [FAQ](docs/wiki/FAQ.md) | You need a quick answer. |
 
-## VPS Deployment With Ansible
+The `docs/wiki/` directory is the maintained source for the project wiki so documentation changes can be reviewed with code changes.
 
-This repo follows the neighboring `/Users/reidar/Projectos` deployment convention: root-level `ansible.cfg`, `inventory/hosts.yml`, `group_vars/vps/vars.yml`, and `ansible-playbook.yml`.
+## Contributing
 
-This repo is set up for agentic Ansible use. The encrypted `group_vars/vps/vault.yml` can live with the project, while the local `.ansible-vault-pass` file is ignored by Git and lets agents run the playbook without prompting for a vault password.
-
-Prepare or rotate the encrypted secret:
-
-```bash
-ansible-vault edit group_vars/vps/vault.yml
-```
-
-Deploy:
-
-```bash
-ansible-playbook ansible-playbook.yml
-```
-
-The playbook pulls `ghcr.io/reedtrullz/hermes-proposals-dashboard:latest`, runs it on `127.0.0.1:8089`, persists `$HERMES_HOME` in the `hermes_proposals_data` Docker volume, checks `/health`, updates the `reidar.tech/proposals` Caddy handlers, and reloads Caddy. If the new container fails health checks and a previous image exists, it rolls back.
-
-## Agent Operations Model
-
-- Proposals: `/proposals` records, extended with goals, parent proposals, assigned agents, acceptance criteria, risk, and manual cost.
-- Projects: first-class initiative records that group proposals through the existing `board` compatibility field and show local next-step recommendations.
-- Agents: local records with role, purpose, prompt, provider/model metadata, allowed tools, monthly budget, manager, and active/paused/disabled state.
-- Goals: outcome, success metric, priority, owner, due date, linked proposals, total cost, active agents, and audit timeline.
-- Workflows: reusable templates with run stages and explicit handoffs. Seed templates are Feature Delivery, Bug Triage, and Research.
-- Budgets: scoped to workspace, goal, project, agent, workflow, or proposal. Costs are estimated/manual only.
-- Agent cost tracking: agent budget meters use current-month actual usage records. Open an agent detail page and use "Record Actual Cost" to enter provider/model, tokens, tool calls, and the real billed USD amount from a provider usage page or invoice.
-- Reviews: default policy requests a decision for critical-risk proposals, proposal costs above `$2.00`, and completing workflows with failed stages.
-- Audit trail: append-only events for proposal, agent, goal, workflow, approval, budget, usage, and handoff changes.
-
-## Existing Integration Points
-
-Creating a real proposal writes its id to `$HERMES_HOME/proposals_trigger`. Approving a proposal writes `APPROVED:<id>`. Demo proposals do not write trigger files. Keep this behavior intact for external Hermes agent loops.
-
-Project pages show immediate recommendations computed from local proposal state, such as unresolved decisions or waiting work. Choosing **Ask worker for recommendations** creates a real waiting proposal in that project, allowing a configured external worker to supply deeper AI-assisted planning through the existing trigger integration.
+Contributions should preserve the proposal-first language, API compatibility, and the external worker boundary. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
