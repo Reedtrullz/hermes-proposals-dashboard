@@ -93,7 +93,7 @@
         <span class="proposal-icon">{% if p.is_demo %}D{% else %}+{% endif %}</span>
         <span class="proposal-copy">
           <strong>{{ p.title }}{% if p.is_demo %}<span class="badge badge-demo">DEMO</span>{% endif %}</strong>
-          <span>{{ p.body or "No outcome entered yet." }}</span>
+          <span>{% if p.project %}{{ p.project.name }} - {% endif %}{{ p.body or "No outcome entered yet." }}</span>
         </span>
       </span>
       <span class="proposal-cell">{{ p.agent.name if p.agent else "Unassigned" }}</span>
@@ -122,13 +122,19 @@
       <form action="/proposals" method="post">
         <div class="field"><label for="new-proposal-title">Title</label><input id="new-proposal-title" name="title" required placeholder="Describe your idea"></div>
         <div class="field"><label for="new-proposal-outcome">Outcome</label><textarea id="new-proposal-outcome" name="body" placeholder="What should happen?"></textarea></div>
+        <div class="field"><label for="new-proposal-project">Project <span class="muted">(optional)</span></label>
+          <select id="new-proposal-project" name="board">
+            <option value="default">No project</option>
+            {% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}
+          </select>
+          {% if not projects %}<p class="tiny muted" style="margin-top:7px"><a class="link" href="/proposals/projects">Create a project</a> to group work.</p>{% endif %}
+        </div>
         <div class="field"><label for="new-proposal-agent">Assign to <span class="muted">(optional)</span></label>
           <select id="new-proposal-agent" name="assigned_agent_id">
             <option value="">Unassigned</option>
             {% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }} - {{ agent.role_title }}</option>{% endfor %}
           </select>
         </div>
-        <input type="hidden" name="board" value="default">
         <button class="btn btn-primary">Submit proposal</button>
       </form>
     </section>

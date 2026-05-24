@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} - Projects - Hermes{% endblock %}
+{% block nav_projects %}is-active{% endblock %}
+{% block header %}{% endblock %}
+{% block head %}
+<style>
+  .project-heading { display:flex; justify-content:space-between; gap:22px; align-items:start; margin-bottom:28px; }
+  .project-heading .breadcrumb { margin-bottom:18px; }
+  .project-heading h1 { font-size:32px; letter-spacing:-.055em; margin-bottom:9px; }
+  .project-layout { display:grid; grid-template-columns:minmax(510px,1fr) 355px; gap:25px; align-items:start; }
+  .suggestion-card { display:grid; grid-template-columns:35px 1fr; gap:14px; margin-bottom:11px; padding:16px; border:1px solid var(--border); border-radius:8px; background:#0c1015; }
+  .suggestion-num { height:29px; width:29px; display:grid; place-items:center; border-radius:50%; color:var(--accent); border:1px solid #29466b; font-size:12px; font-weight:700; }
+  .suggestion-card h3 { font-size:14px; margin-bottom:6px; }
+  .suggestion-card p { margin-bottom:11px; line-height:1.48; }
+  .project-proposal { display:grid; grid-template-columns:minmax(180px,1fr) 140px 98px; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border); text-decoration:none; }
+  .project-proposal:last-child { border:0; }
+  .project-proposal strong { display:block; margin-bottom:4px; font-size:13px; }
+  .assistant-panel { border-color:#29466b; background:linear-gradient(120deg,#111d2d,#10151c); }
+  .assistant-panel p { line-height:1.55; margin:10px 0 15px; }
+  @media (max-width:980px) {
+    .project-layout { grid-template-columns:1fr; }
+    .project-heading { flex-direction:column; }
+  }
+  @media (max-width:620px) { .project-proposal { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<header class="project-heading">
+  <div>
+    <div class="breadcrumb"><a href="/proposals/projects">Projects</a><span>/</span><span>{{ project.name }}</span></div>
+    <h1>{{ project.name }}</h1>
+    <p class="muted">{{ project.desired_outcome or project.description or "No outcome recorded yet." }}</p>
+  </div>
+  <span class="badge badge-{{ project.status }}">{{ project.status|title }}</span>
+</header>
+<div class="project-layout">
+  <main>
+    <section class="card">
+      <div class="split" style="margin-bottom:17px">
+        <h2 style="font-size:18px">Suggested next steps</h2>
+        <span class="badge">Local guidance</span>
+      </div>
+      {% for suggestion in project.recommendations %}
+      <article class="suggestion-card">
+        <span class="suggestion-num">{{ loop.index }}</span>
+        <div>
+          <h3>{{ suggestion.title }}</h3>
+          <p class="small muted">{{ suggestion.body }}</p>
+          <a class="link small" href="{{ suggestion.href }}">{{ suggestion.action }}</a>
+        </div>
+      </article>
+      {% endfor %}
+      <p class="tiny muted">Calculated from recorded proposal states and decisions; no external model generated this list.</p>
+    </section>
+    <section class="card">
+      <div class="split" style="margin-bottom:10px">
+        <h2 style="font-size:18px">Proposals</h2>
+        <span class="badge">{{ project.proposal_count }}</span>
+      </div>
+      {% for proposal in project.proposals %}
+      <a class="project-proposal" href="/proposals/{{ proposal.id }}">
+        <span><strong>{{ proposal.title }}</strong><small class="muted">{{ proposal.body or "No outcome entered yet." }}</small></span>
+        <span>{% if proposal.has_pending_decision %}<span class="badge badge-decision">Needs decision</span>{% else %}<span class="badge badge-{{ proposal.status }}">{{ PROPOSAL_LABELS[proposal.status] }}</span>{% endif %}</span>
+        <span class="tiny muted reltime" data-ts="{{ proposal.updated_at }}"></span>
+      </a>
+      {% endfor %}
+      {% if not project.proposals %}<p class="small muted">No proposals attached to this project yet.</p>{% endif %}
+    </section>
+  </main>
+  <aside>
+    <section class="card assistant-panel">
+      <h3>AI-assisted planning</h3>
+      <p class="small muted">Create a planning proposal for a configured Hermes or CLI worker to produce deeper recommendations. Until a worker consumes it, the request remains waiting.</p>
+      <form action="/proposals/projects/{{ project.id }}/planning" method="post"><button class="btn btn-primary">Ask worker for recommendations</button></form>
+    </section>
+    <section class="card" id="new-project-proposal">
+      <h3>New proposal for this project</h3>
+      <form action="/proposals" method="post">
+        <input type="hidden" name="board" value="{{ project.id }}">
+        <div class="field"><label for="project-proposal-title">Title</label><input id="project-proposal-title" name="title" required placeholder="Next outcome to pursue"></div>
+        <div class="field"><label for="project-proposal-body">Outcome</label><textarea id="project-proposal-body" name="body" placeholder="What should happen?"></textarea></div>
+        <div class="field"><label for="project-proposal-agent">Assign to <span class="muted">(optional)</span></label><select id="project-proposal-agent" name="assigned_agent_id"><option value="">Unassigned</option>{% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}</select></div>
+        <button class="btn btn-primary">Submit proposal</button>
+      </form>
+    </section>
+    <section class="card" id="edit-project">
+      <h3>Project details</h3>
+      <form action="/proposals/projects/{{ project.id }}" method="post">
+        <div class="field"><label for="edit-project-name">Name</label><input id="edit-project-name" name="name" value="{{ project.name }}" required></div>
+        <div class="field"><label for="edit-project-description">Description</label><textarea id="edit-project-description" name="description">{{ project.description }}</textarea></div>
+        <div class="field"><label for="edit-project-outcome">Desired outcome</label><textarea id="edit-project-outcome" name="desired_outcome">{{ project.desired_outcome }}</textarea></div>
+        <div class="field"><label for="edit-project-status">Status</label><select id="edit-project-status" name="status">{% for status in PROJECT_STATUSES %}<option value="{{ status }}" {% if project.status == status %}selected{% endif %}>{{ status|title }}</option>{% endfor %}</select></div>
+        <button class="btn btn-sm">Save project</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

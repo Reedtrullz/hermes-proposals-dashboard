@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Projects - Hermes{% endblock %}
+{% block nav_projects %}is-active{% endblock %}
+{% block header %}{% endblock %}
+{% block head %}
+<style>
+  .projects-layout { display:grid; grid-template-columns:minmax(520px,1fr) 345px; gap:25px; align-items:start; }
+  .project-grid { display:grid; gap:13px; }
+  .project-card { display:block; text-decoration:none; padding:22px; }
+  .project-card:hover { border-color:var(--border-strong); }
+  .project-card h2 { font-size:18px; margin-bottom:8px; }
+  .project-metrics { display:flex; flex-wrap:wrap; gap:9px; margin:18px 0; }
+  .recommendation-preview { border-top:1px solid var(--border); padding-top:15px; display:flex; align-items:flex-start; gap:11px; }
+  .recommendation-preview strong { display:block; font-size:13px; margin-bottom:5px; }
+  .recommendation-preview p { font-size:12px; line-height:1.45; color:var(--muted); }
+  .suggestion-mark { flex:0 0 auto; color:var(--accent); font-size:15px; }
+  .explain-panel { border-color:#29466b; background:linear-gradient(120deg,#111d2d,#11161d); }
+  .explain-panel p { margin-top:9px; line-height:1.55; }
+  @media (max-width:980px) { .projects-layout { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div class="page-heading-row">
+    <div>
+      <h1>Projects</h1>
+      <p>Organize proposals by project and surface the most useful next action.</p>
+    </div>
+    <a class="btn btn-primary" href="#new-project">+ New project</a>
+  </div>
+</section>
+<div class="projects-layout">
+  <main class="project-grid">
+    {% for project in projects %}
+    <a class="card project-card" href="/proposals/projects/{{ project.id }}">
+      <div class="split">
+        <div>
+          <h2>{{ project.name }}</h2>
+          <p class="small muted">{{ project.desired_outcome or project.description or "No outcome recorded yet." }}</p>
+        </div>
+        <span class="badge badge-{{ project.status }}">{{ project.status|title }}</span>
+      </div>
+      <div class="project-metrics">
+        <span class="badge">{{ project.proposal_count }} proposals</span>
+        {% if project.decision_count %}<span class="badge badge-decision">{{ project.decision_count }} needs decision</span>{% endif %}
+        {% if project.waiting_count %}<span class="badge badge-waiting">{{ project.waiting_count }} waiting</span>{% endif %}
+        <span class="badge">{{ money(project.cost_total) }}</span>
+      </div>
+      {% if project.recommendations %}
+      <div class="recommendation-preview">
+        <span class="suggestion-mark">*</span>
+        <div><strong>Recommended next: {{ project.recommendations[0].title }}</strong><p>{{ project.recommendations[0].body }}</p></div>
+      </div>
+      {% endif %}
+    </a>
+    {% endfor %}
+    {% if not projects %}
+    <section class="card empty">
+      <h3>No projects yet</h3>
+      <p class="small">Create a project to group proposals and receive next-step guidance.</p>
+    </section>
+    {% endif %}
+    {% if unassigned_count %}
+    <section class="card">
+      <h3>Unassigned proposals</h3>
+      <p class="small muted">{{ unassigned_count }} real proposal{% if unassigned_count != 1 %}s are{% else %} is{% endif %} not assigned to a project yet. Open a proposal and set its project under advanced metadata.</p>
+    </section>
+    {% endif %}
+  </main>
+  <aside>
+    <section class="card explain-panel">
+      <h3>Recommended next steps</h3>
+      <p class="small muted">These recommendations are calculated locally from waiting work, decisions, and progress records. No AI model is called automatically.</p>
+      <p class="small muted">Once a worker is configured, each project can submit a planning proposal for deeper AI-assisted recommendations.</p>
+    </section>
+    <section class="card" id="new-project">
+      <h3>Create a project</h3>
+      <form action="/proposals/projects" method="post">
+        <div class="field"><label for="project-name">Name</label><input id="project-name" name="name" required placeholder="Product launch"></div>
+        <div class="field"><label for="project-description">Description</label><textarea id="project-description" name="description" placeholder="What belongs in this project?"></textarea></div>
+        <div class="field"><label for="project-outcome">Desired outcome</label><textarea id="project-outcome" name="desired_outcome" placeholder="What should be true when this succeeds?"></textarea></div>
+        <button class="btn btn-primary">Create project</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -35,6 +35,7 @@ PROPOSAL_LABELS = {
     "implemented": "Done",
     "rejected": "Rejected",
 }
+PROJECT_STATUSES = ["active", "paused", "completed", "archived"]
 RISK_LEVELS = ["low", "medium", "high", "critical"]
 AGENT_STATUSES = ["active", "paused", "disabled"]
 EXECUTOR_TYPES = ["hermes", "codex", "claude-code", "opencode", "agy", "command-code", "kilo"]
@@ -500,6 +501,19 @@ def create_schema(db: sqlite3.Connection) -> None:
 
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            desired_outcome TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS agents (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -705,6 +719,7 @@ def create_schema(db: sqlite3.Connection) -> None:
         """
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_prop_status ON proposals(status)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_prop_board ON proposals(board)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_prop_goal ON proposals(goal_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_prop_agent ON proposals(assigned_agent_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_pc_proposal ON proposal_comments(proposal_id, created_at)")
@@ -794,6 +809,17 @@ def init_db() -> None:
     with db_connect() as db:
         create_schema(db)
         seed_defaults(db)
+        now = ts()
+        db.execute(
+            """
+            INSERT OR IGNORE INTO projects
+            (id,name,description,desired_outcome,status,created_at,updated_at)
+            SELECT DISTINCT board, board, '', '', 'active', ?, ?
+            FROM proposals
+            WHERE board <> 'default' AND is_demo = 0
+            """,
+            (now, now),
+        )
         db.commit()
 
 
@@ -967,12 +993,127 @@ def budget_rows(db: sqlite3.Connection, scope_type: str | None = None, scope_id:
     return data
 
 
+def project_recommendations(project: dict[str, Any], proposals: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Provide transparent local guidance from recorded project state."""
+    recommendations: list[dict[str, str]] = []
+    pending = [proposal for proposal in proposals if proposal["has_pending_decision"]]
+    waiting = [proposal for proposal in proposals if proposal["status"] == "waiting" and not proposal["has_pending_decision"]]
+    in_progress = [proposal for proposal in proposals if proposal["status"] == "processing"]
+    in_review = [proposal for proposal in proposals if proposal["status"] == "review" and not proposal["has_pending_decision"]]
+    rejected = [proposal for proposal in proposals if proposal["status"] == "rejected"]
+    approved = [proposal for proposal in proposals if proposal["status"] == "approved"]
+    implemented = [proposal for proposal in proposals if proposal["status"] == "implemented"]
+
+    if pending:
+        recommendations.append({
+            "kind": "decision",
+            "title": f"Resolve {len(pending)} waiting decision{'s' if len(pending) != 1 else ''}",
+            "body": "A proposal is ready for approval or requested changes; deciding it clears the next execution step.",
+            "href": f"/proposals/{pending[0]['id']}",
+            "action": "Open review",
+        })
+    if waiting:
+        recommendations.append({
+            "kind": "waiting",
+            "title": f"Route {len(waiting)} waiting proposal{'s' if len(waiting) != 1 else ''}",
+            "body": "Assign a worker when execution is configured, or review the saved outcome manually.",
+            "href": f"/proposals/{waiting[0]['id']}",
+            "action": "Review waiting item",
+        })
+    if in_progress:
+        recommendations.append({
+            "kind": "processing",
+            "title": "Check active work for a usable update",
+            "body": "Review current notes and capture blockers or acceptance evidence before the next decision.",
+            "href": f"/proposals/{in_progress[0]['id']}",
+            "action": "Review progress",
+        })
+    if in_review and len(recommendations) < 3:
+        recommendations.append({
+            "kind": "review",
+            "title": "Turn review into a clear decision",
+            "body": "Confirm acceptance criteria and record an approve or request-changes outcome.",
+            "href": f"/proposals/{in_review[0]['id']}",
+            "action": "Open proposal",
+        })
+    if rejected and len(recommendations) < 3:
+        recommendations.append({
+            "kind": "revision",
+            "title": "Revise requested changes",
+            "body": "A rejected proposal can be narrowed or clarified before being submitted again.",
+            "href": f"/proposals/{rejected[0]['id']}",
+            "action": "Review changes",
+        })
+    if approved and len(recommendations) < 3:
+        recommendations.append({
+            "kind": "approved",
+            "title": "Track approved work through completion",
+            "body": "Link a workflow or record implementation progress so the approved outcome does not stall.",
+            "href": f"/proposals/{approved[0]['id']}",
+            "action": "Open approved work",
+        })
+    if implemented and not recommendations:
+        recommendations.append({
+            "kind": "next",
+            "title": "Choose the next project milestone",
+            "body": "Recorded proposals are complete. Capture the next outcome worth advancing.",
+            "href": f"/proposals/projects/{project['id']}#new-project-proposal",
+            "action": "Create proposal",
+        })
+    if not proposals:
+        recommendations.append({
+            "kind": "start",
+            "title": "Define the first outcome",
+            "body": "Create one scoped proposal with a measurable result before assigning execution.",
+            "href": f"/proposals/projects/{project['id']}#new-project-proposal",
+            "action": "Create proposal",
+        })
+    if not project.get("desired_outcome") and len(recommendations) < 3:
+        recommendations.append({
+            "kind": "context",
+            "title": "Capture the project outcome",
+            "body": "Adding a desired outcome makes future proposal choices and recommendations more useful.",
+            "href": f"/proposals/projects/{project['id']}#edit-project",
+            "action": "Add outcome",
+        })
+    return recommendations[:3]
+
+
+def project_context(db: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
+    project = row(db.execute("SELECT * FROM projects WHERE id=?", (project_id,)))
+    if not project:
+        return None
+    proposals = enrich_proposals(
+        db,
+        "SELECT * FROM proposals WHERE board=? AND is_demo=0 ORDER BY updated_at DESC",
+        (project_id,),
+    )
+    project["proposals"] = proposals
+    project["proposal_count"] = len(proposals)
+    project["waiting_count"] = sum(1 for proposal in proposals if proposal["status"] == "waiting")
+    project["decision_count"] = sum(1 for proposal in proposals if proposal["has_pending_decision"])
+    project["done_count"] = sum(1 for proposal in proposals if proposal["status"] in {"approved", "implemented"})
+    project["cost_total"] = scope_spend(db, "project", project_id)
+    project["recommendations"] = project_recommendations(project, proposals)
+    return project
+
+
+def projects_overview(db: sqlite3.Connection) -> list[dict[str, Any]]:
+    projects = []
+    for item in rows(db.execute("SELECT id FROM projects ORDER BY updated_at DESC, name")):
+        context = project_context(db, item["id"])
+        if context:
+            projects.append(context)
+    return projects
+
+
 def enrich_proposals(db: sqlite3.Connection, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
     data = rows(db.execute(query, params))
     for p in data:
         p["goal"] = row(db.execute("SELECT id, title FROM goals WHERE id=?", (p.get("goal_id"),))) if p.get("goal_id") else None
         p["agent"] = row(db.execute("SELECT id, name, role_title, status FROM agents WHERE id=?", (p.get("assigned_agent_id"),))) if p.get("assigned_agent_id") else None
         p["parent"] = row(db.execute("SELECT id, title FROM proposals WHERE id=?", (p.get("parent_id"),))) if p.get("parent_id") else None
+        p["project"] = row(db.execute("SELECT id, name FROM projects WHERE id=?", (p.get("board"),))) if p.get("board") != "default" else None
         p["criteria"] = loads(p.get("acceptance_criteria_json"), []) or []
         p["cost_total"] = card_cost(db, p["id"])
         p["has_pending_decision"] = bool(
@@ -1013,6 +1154,7 @@ def proposal_context(db: sqlite3.Connection, proposal_id: str) -> dict[str, Any]
         "comments": comments,
         "agents": rows(db.execute("SELECT * FROM agents ORDER BY name")),
         "goals": rows(db.execute("SELECT * FROM goals ORDER BY updated_at DESC")),
+        "projects": rows(db.execute("SELECT id, name FROM projects WHERE status <> 'archived' ORDER BY name")),
         "parents": rows(db.execute("SELECT id, title FROM proposals WHERE id<>? ORDER BY updated_at DESC LIMIT 100", (proposal_id,))),
         "events": entity_events(db, "proposal", proposal_id),
         "handoffs": rows(db.execute("SELECT h.*, fa.name AS from_agent, ta.name AS to_agent FROM agent_handoffs h LEFT JOIN agents fa ON fa.id=h.from_agent_id LEFT JOIN agents ta ON ta.id=h.to_agent_id WHERE h.proposal_id=? ORDER BY h.created_at DESC", (proposal_id,))),
@@ -1036,6 +1178,15 @@ def create_proposal_record(
     proposal_id = make_id("p")
     now = ts()
     with db_connect() as db:
+        if board != "default" and not is_demo:
+            db.execute(
+                """
+                INSERT OR IGNORE INTO projects
+                (id,name,description,desired_outcome,status,created_at,updated_at)
+                VALUES (?,?,'','','active',?,?)
+                """,
+                (board, board, now, now),
+            )
         db.execute(
             """
             INSERT INTO proposals
@@ -1145,6 +1296,7 @@ def template_context(extra: dict[str, Any] | None = None) -> dict[str, Any]:
         "GOAL_PRIORITIES": GOAL_PRIORITIES,
         "WORKFLOW_RUN_STATUSES": WORKFLOW_RUN_STATUSES,
         "HANDOFF_STATUSES": HANDOFF_STATUSES,
+        "PROJECT_STATUSES": PROJECT_STATUSES,
         "money": money,
         "json_to_lines": json_to_lines,
     }
@@ -1235,6 +1387,7 @@ async def proposals_list(request: Request):
         elif status_filter == "done":
             proposals = [p for p in proposals if p["status"] in {"approved", "implemented", "rejected"} and not p["has_pending_decision"]]
         agents = rows(db.execute("SELECT id, name, role_title FROM agents WHERE status='active' ORDER BY name"))
+        projects = rows(db.execute("SELECT id, name FROM projects WHERE status <> 'archived' ORDER BY name"))
         return templates.TemplateResponse(
             request=request,
             name="proposals_list.html",
@@ -1244,6 +1397,7 @@ async def proposals_list(request: Request):
                 "executor_filter": executor_filter,
                 "status_filter": status_filter,
                 "agents": agents,
+                "projects": projects,
             }),
         )
 
@@ -1314,6 +1468,101 @@ async def setup_page(request: Request):
     return templates.TemplateResponse(request=request, name="setup.html", context=template_context(context))
 
 
+@app.get("/proposals/projects", response_class=HTMLResponse)
+async def projects_page(request: Request):
+    with db_connect() as db:
+        projects = projects_overview(db)
+        unassigned_count = db.execute(
+            "SELECT COUNT(*) AS n FROM proposals WHERE board='default' AND is_demo=0"
+        ).fetchone()["n"]
+    return templates.TemplateResponse(
+        request=request,
+        name="projects.html",
+        context=template_context({"projects": projects, "unassigned_count": unassigned_count}),
+    )
+
+
+@app.post("/proposals/projects")
+async def create_project(
+    name: str = Form(...),
+    description: str = Form(""),
+    desired_outcome: str = Form(""),
+    status: str = Form("active"),
+):
+    if status not in PROJECT_STATUSES:
+        return JSONResponse({"error": "invalid project status"}, status_code=400)
+    project_id = make_id("project")
+    now = ts()
+    with db_connect() as db:
+        existing = row(db.execute("SELECT id FROM projects WHERE lower(name)=lower(?)", (name.strip(),)))
+        if existing:
+            return RedirectResponse(f"/proposals/projects/{existing['id']}", status_code=303)
+        db.execute(
+            """
+            INSERT INTO projects
+            (id,name,description,desired_outcome,status,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (project_id, name.strip(), description, desired_outcome, status, now, now),
+        )
+        create_event(db, "human", "user", "project", project_id, "project_created", {"name": name.strip()})
+        db.commit()
+    return RedirectResponse(f"/proposals/projects/{project_id}", status_code=303)
+
+
+@app.get("/proposals/projects/{project_id}", response_class=HTMLResponse)
+async def project_detail(request: Request, project_id: str):
+    with db_connect() as db:
+        context = project_context(db, project_id)
+        agents = rows(db.execute("SELECT id, name, role_title FROM agents WHERE status='active' ORDER BY name"))
+    if not context:
+        return HTMLResponse("<h2>Not found</h2>", status_code=404)
+    return templates.TemplateResponse(
+        request=request,
+        name="project_detail.html",
+        context=template_context({"project": context, "agents": agents}),
+    )
+
+
+@app.post("/proposals/projects/{project_id}")
+async def update_project(
+    project_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    desired_outcome: str = Form(""),
+    status: str = Form("active"),
+):
+    if status not in PROJECT_STATUSES:
+        return JSONResponse({"error": "invalid project status"}, status_code=400)
+    with db_connect() as db:
+        db.execute(
+            "UPDATE projects SET name=?, description=?, desired_outcome=?, status=?, updated_at=? WHERE id=?",
+            (name.strip(), description, desired_outcome, status, ts(), project_id),
+        )
+        create_event(db, "human", "user", "project", project_id, "project_updated", {"name": name.strip(), "status": status})
+        db.commit()
+    return RedirectResponse(f"/proposals/projects/{project_id}", status_code=303)
+
+
+@app.post("/proposals/projects/{project_id}/planning")
+async def request_project_planning(project_id: str):
+    with db_connect() as db:
+        project = row(db.execute("SELECT name, desired_outcome FROM projects WHERE id=?", (project_id,)))
+    if not project:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    body = (
+        f"Recommend prioritized next steps for {project['name']}. "
+        f"Desired outcome: {project.get('desired_outcome') or 'Not specified yet'}. "
+        "Review linked proposals, identify the highest-value next action, and explain the reasoning."
+    )
+    proposal_id = create_proposal_record(
+        f"Recommend next steps for {project['name']}",
+        body,
+        project_id,
+    )
+    return RedirectResponse(f"/proposals/{proposal_id}", status_code=303)
+
+
 @app.get("/proposals/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     with db_connect() as db:
@@ -1322,6 +1571,7 @@ async def settings_page(request: Request):
             "agents": db.execute("SELECT COUNT(*) AS n FROM agents").fetchone()["n"],
             "budgets": db.execute("SELECT COUNT(*) AS n FROM budgets").fetchone()["n"],
             "templates": db.execute("SELECT COUNT(*) AS n FROM workflow_templates").fetchone()["n"],
+            "projects": db.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"],
         }
     return templates.TemplateResponse(request=request, name="settings.html", context=template_context({"counts": counts}))
 
@@ -1659,6 +1909,7 @@ async def add_proposal_note_page(
 @app.post("/api/proposals/{proposal_id}/metadata")
 async def update_proposal_metadata(
     proposal_id: str,
+    board: str | None = Form(None),
     goal_id: str = Form(""),
     parent_id: str = Form(""),
     assigned_agent_id: str = Form(""),
@@ -1671,14 +1922,24 @@ async def update_proposal_metadata(
         return JSONResponse({"error": "invalid risk_level"}, status_code=400)
     now = ts()
     with db_connect() as db:
+        if board and board != "default":
+            db.execute(
+                """
+                INSERT OR IGNORE INTO projects
+                (id,name,description,desired_outcome,status,created_at,updated_at)
+                VALUES (?,?,'','','active',?,?)
+                """,
+                (board, board, now, now),
+            )
         db.execute(
             """
             UPDATE proposals
-            SET goal_id=NULLIF(?, ''), parent_id=NULLIF(?, ''), assigned_agent_id=NULLIF(?, ''),
+            SET board=COALESCE(?, board), goal_id=NULLIF(?, ''), parent_id=NULLIF(?, ''), assigned_agent_id=NULLIF(?, ''),
                 risk_level=?, acceptance_criteria_json=?, estimated_cost_usd=?, actual_cost_usd=?, updated_at=?
             WHERE id=?
             """,
             (
+                board,
                 goal_id,
                 parent_id,
                 assigned_agent_id,
@@ -1697,7 +1958,7 @@ async def update_proposal_metadata(
             "proposal",
             proposal_id,
             "proposal_metadata_updated",
-            {"goal_id": goal_id or None, "assigned_agent_id": assigned_agent_id or None, "risk_level": risk_level},
+            {"board": board, "goal_id": goal_id or None, "assigned_agent_id": assigned_agent_id or None, "risk_level": risk_level},
         )
         if assigned_agent_id:
             write_trigger_executor_meta(db, proposal_id)

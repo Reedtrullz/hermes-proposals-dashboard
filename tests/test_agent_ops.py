@@ -31,10 +31,12 @@ def test_migrates_existing_proposals_schema(tmp_path, monkeypatch):
         template_stage_cols = {r["name"] for r in db.execute("PRAGMA table_info(workflow_template_stages)").fetchall()}
         run_stage_cols = {r["name"] for r in db.execute("PRAGMA table_info(workflow_run_stages)").fetchall()}
         usage_cols = {r["name"] for r in db.execute("PRAGMA table_info(usage_records)").fetchall()}
+        project_cols = {r["name"] for r in db.execute("PRAGMA table_info(projects)").fetchall()}
         assert {"goal_id", "parent_id", "assigned_agent_id", "acceptance_criteria_json", "risk_level", "estimated_cost_usd", "actual_cost_usd", "is_demo"} <= proposal_cols
         assert {"assigned_agent_id", "handoff_agent_id"} <= template_stage_cols
         assert {"assigned_agent_id", "handoff_agent_id"} <= run_stage_cols
         assert "actual_cost_usd" in usage_cols
+        assert {"id", "name", "description", "desired_outcome", "status"} <= project_cols
         assert db.execute("SELECT COUNT(*) AS n FROM agents").fetchone()["n"] >= 6
         assert db.execute("SELECT COUNT(*) AS n FROM workflow_templates").fetchone()["n"] == 3
         assert db.execute("SELECT COUNT(*) AS n FROM approval_policies").fetchone()["n"] == 4
@@ -117,6 +119,7 @@ def test_proposals_page_renders_first_use_and_settings_navigation(tmp_path, monk
     assert "Waiting for worker" in response.text
     assert 'href="/proposals/workflows"' in response.text
     assert 'href="/proposals/approvals"' in response.text
+    assert 'href="/proposals/projects"' in response.text
     assert 'href="/proposals/settings"' in response.text
 
 
@@ -124,7 +127,7 @@ def test_prefixed_ops_pages_and_api_routes_work_under_proposals(tmp_path, monkey
     main = load_main(tmp_path, monkeypatch)
     client = TestClient(main.app)
 
-    for path in ["/proposals/settings", "/proposals/setup", "/proposals/goals", "/proposals/agents", "/proposals/workflows", "/proposals/approvals", "/proposals/budgets"]:
+    for path in ["/proposals/projects", "/proposals/settings", "/proposals/setup", "/proposals/goals", "/proposals/agents", "/proposals/workflows", "/proposals/approvals", "/proposals/budgets"]:
         response = client.get(path)
         assert response.status_code == 200, path
 
@@ -576,3 +579,101 @@ def test_proposal_decision_resolves_pending_review_consistently(tmp_path, monkey
     with main.db_connect() as db:
         assert db.execute("SELECT status FROM proposals WHERE id=?", (proposal_id,)).fetchone()["status"] == "rejected"
         assert db.execute("SELECT status FROM approval_requests WHERE entity_id=?", (proposal_id,)).fetchone()["status"] == "rejected"
+
+
+def test_project_create_lists_scoped_proposals_and_local_recommendations(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    created = client.post(
+        "/proposals/projects",
+        data={
+            "name": "Client Portal",
+            "description": "Consolidate account management",
+            "desired_outcome": "Customers can manage access without support",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    project_url = created.headers["location"]
+    project_id = project_url.rsplit("/", 1)[1]
+
+    proposal = client.post(
+        "/proposals",
+        data={"title": "Define permissions", "body": "Specify roles", "board": project_id},
+        follow_redirects=False,
+    )
+    assert proposal.status_code == 303
+
+    overview = client.get("/proposals/projects").text
+    assert "Client Portal" in overview
+    assert "Recommended next: Route 1 waiting proposal" in overview
+    assert "No AI model is called automatically" in overview
+
+    detail = client.get(project_url).text
+    assert "Define permissions" in detail
+    assert "Suggested next steps" in detail
+    assert "Route 1 waiting proposal" in detail
+    assert "no external model generated this list" in detail
+
+
+def test_legacy_board_api_creates_visible_project_and_metadata_can_reassign(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    proposal_id = client.post(
+        "/api/proposals",
+        data={"title": "Legacy project proposal", "board": "older-project"},
+    ).json()["id"]
+    overview = client.get("/proposals/projects").text
+    assert "older-project" in overview
+
+    project = client.post("/proposals/projects", data={"name": "New Home"}, follow_redirects=False)
+    new_project_id = project.headers["location"].rsplit("/", 1)[1]
+    client.post(
+        f"/api/proposals/{proposal_id}/metadata",
+        data={"board": new_project_id, "risk_level": "low"},
+    )
+    page = client.get(f"/api/proposals/{proposal_id}").json()
+    assert page["board"] == new_project_id
+
+
+def test_project_worker_recommendation_creates_waiting_scoped_proposal(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+    project = client.post(
+        "/proposals/projects",
+        data={"name": "Website Refresh", "desired_outcome": "Publish a clearer homepage"},
+        follow_redirects=False,
+    )
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+
+    request = client.post(f"/proposals/projects/{project_id}/planning", follow_redirects=False)
+    assert request.status_code == 303
+    proposal_id = request.headers["location"].rsplit("/", 1)[1]
+    with main.db_connect() as db:
+        proposal = db.execute("SELECT title, body, board, status FROM proposals WHERE id=?", (proposal_id,)).fetchone()
+        assert proposal["title"] == "Recommend next steps for Website Refresh"
+        assert proposal["board"] == project_id
+        assert proposal["status"] == "waiting"
+        assert "Publish a clearer homepage" in proposal["body"]
+    assert (tmp_path / "proposals_trigger").read_text() == proposal_id
+
+
+def test_completed_project_recommends_defining_next_milestone(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+    project = client.post(
+        "/proposals/projects",
+        data={"name": "Released App", "desired_outcome": "The release is available"},
+        follow_redirects=False,
+    )
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+    proposal_id = client.post(
+        "/api/proposals",
+        data={"title": "Ship release", "board": project_id},
+    ).json()["id"]
+    client.patch(f"/api/proposals/{proposal_id}/status", data={"status": "implemented"})
+
+    detail = client.get(f"/proposals/projects/{project_id}").text
+    assert "Choose the next project milestone" in detail

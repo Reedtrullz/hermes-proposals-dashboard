@@ -14,6 +14,7 @@
 ## Architecture
 - `main.py` is the FastAPI app, SQLite migration layer, route layer, seed data, and small data-access helpers.
 - `templates/` contains server-rendered Jinja pages. Keep proposals centered around existing `/proposals` routes.
+- `projects` stores first-class project records; `proposals.board` remains the project compatibility key for existing APIs and budget scopes.
 - SQLite lives at `$HERMES_HOME/proposals.db`; by default this is `~/.hermes/proposals.db`.
 - New "agent operations" records are local SQLite tables only. Agent runs, costs, handoffs, approvals, and audit events are records; this app does not call paid LLM providers.
 - `~/.hermes/proposals_trigger` is an existing integration point. New real proposal creation writes the proposal id; approving a real proposal writes `APPROVED:<id>`.
@@ -47,6 +48,11 @@ Key gotcha: `command-code` npm package produces binary `cmd`, NOT `command-code`
 - `GET /api/agents/{id}/executor-status` — JSON: checks if CLI binary is on PATH, runnable, returns version
 - `GET /api/agents/{id}/executor-status-ui` — HTML fragment: styled badge for htmx live verification
 - `POST /api/proposals/dry-run` — creates a `[DRY-RUN]` test proposal for a CLI agent, writes trigger files
+
+### Project UI routes
+- `GET /proposals/projects` — project overview and locally derived next-step recommendations
+- `GET /proposals/projects/{id}` — project proposals, recommendations, and planning action
+- `POST /proposals/projects/{id}/planning` — creates a waiting proposal for an external worker to produce deeper recommendations
 
 ### Safety
 - `codex` and `command-code` executors auto-trigger a "Dangerous executor requires approval" policy (they have `--yolo`/`--dangerously-bypass` flags that can escape sandbox)

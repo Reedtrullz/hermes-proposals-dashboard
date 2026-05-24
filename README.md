@@ -18,11 +18,13 @@ If this repository directory is moved or renamed, recreate `.venv` before launch
 
 ## First Use
 
-1. Open `/proposals` and select **Try demo** to open removable sample data. The demo never executes a worker.
-2. Review the sample proposal, add a note, and exercise **Approve** or **Request changes**.
-3. Select **Remove demo** on the demo detail page to delete only the sample records.
-4. Submit a real proposal from the inbox. It is saved as **Waiting for worker**.
-5. Configure an external Hermes or CLI worker before expecting live execution. This dashboard records work and writes trigger files; it does not itself call paid LLM providers.
+1. Open `/proposals/projects` and create projects for the initiatives you are working on.
+2. Open `/proposals` and select **Try demo** to open removable sample data. The demo never executes a worker.
+3. Review the sample proposal, add a note, and exercise **Approve** or **Request changes**.
+4. Select **Remove demo** on the demo detail page to delete only the sample records.
+5. Submit real proposals into a project. They are saved as **Waiting for worker**.
+6. Open a project to see locally calculated next-step recommendations. These are derived from stored status and decision data, not from an automatic model call.
+7. Configure an external Hermes or CLI worker before expecting live execution or deeper AI-assisted recommendations. A project can submit a planning proposal for that worker.
 
 ## Validation
 
@@ -65,6 +67,7 @@ The playbook pulls `ghcr.io/reedtrullz/hermes-proposals-dashboard:latest`, runs 
 ## Agent Operations Model
 
 - Proposals: `/proposals` records, extended with goals, parent proposals, assigned agents, acceptance criteria, risk, and manual cost.
+- Projects: first-class initiative records that group proposals through the existing `board` compatibility field and show local next-step recommendations.
 - Agents: local records with role, purpose, prompt, provider/model metadata, allowed tools, monthly budget, manager, and active/paused/disabled state.
 - Goals: outcome, success metric, priority, owner, due date, linked proposals, total cost, active agents, and audit timeline.
 - Workflows: reusable templates with run stages and explicit handoffs. Seed templates are Feature Delivery, Bug Triage, and Research.
@@ -76,3 +79,5 @@ The playbook pulls `ghcr.io/reedtrullz/hermes-proposals-dashboard:latest`, runs 
 ## Existing Integration Points
 
 Creating a real proposal writes its id to `$HERMES_HOME/proposals_trigger`. Approving a proposal writes `APPROVED:<id>`. Demo proposals do not write trigger files. Keep this behavior intact for external Hermes agent loops.
+
+Project pages show immediate recommendations computed from local proposal state, such as unresolved decisions or waiting work. Choosing **Ask worker for recommendations** creates a real waiting proposal in that project, allowing a configured external worker to supply deeper AI-assisted planning through the existing trigger integration.
