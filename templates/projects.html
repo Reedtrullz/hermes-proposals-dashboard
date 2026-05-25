@@ -36,7 +36,7 @@
       <div class="split">
         <div>
           <h2>{{ project.name }}</h2>
-          <p class="small muted">{{ project.desired_outcome or project.description or "No outcome recorded yet." }}</p>
+          <p class="small muted">{{ project.desired_outcome or project.description }}</p>
         </div>
         <span class="badge badge-{{ project.status }}">{{ project.status|title }}</span>
       </div>

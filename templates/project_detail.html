@@ -79,7 +79,7 @@
         <input type="hidden" name="board" value="{{ project.id }}">
         <div class="field"><label for="project-proposal-title">Title</label><input id="project-proposal-title" name="title" required placeholder="Next outcome to pursue"></div>
         <div class="field"><label for="project-proposal-body">Outcome</label><textarea id="project-proposal-body" name="body" placeholder="What should happen?"></textarea></div>
-        <div class="field"><label for="project-proposal-agent">Assign to <span class="muted">(optional)</span></label><select id="project-proposal-agent" name="assigned_agent_id"><option value="">Unassigned</option>{% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="project-proposal-agent">Assign to <span class="muted">(auto-detected)</span></label><select id="project-proposal-agent" name="assigned_agent_id"><option value="">Auto-detect from content</option>{% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }}</option>{% endfor %}</select></div>
         <button class="btn btn-primary">Submit proposal</button>
       </form>
     </section>

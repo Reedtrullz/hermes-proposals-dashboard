@@ -143,9 +143,9 @@
           </select>
           {% if not projects %}<p class="tiny muted" style="margin-top:7px"><a class="link" href="/proposals/projects">Create a project</a> to group work.</p>{% endif %}
         </div>
-        <div class="field"><label for="new-proposal-agent">Assign to <span class="muted">(optional)</span></label>
+        <div class="field"><label for="new-proposal-agent">Assign to <span class="muted">(auto-detected)</span></label>
           <select id="new-proposal-agent" name="assigned_agent_id">
-            <option value="">Unassigned</option>
+            <option value="">Auto-detect from content</option>
             {% for agent in agents %}<option value="{{ agent.id }}">{{ agent.name }} - {{ agent.role_title }}</option>{% endfor %}
           </select>
         </div>

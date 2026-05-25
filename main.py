@@ -26,11 +26,12 @@ AUTH_URL = os.environ.get("AUTH_URL", "https://reidar.tech")
 HERMES_REQUIRE_AUTH = os.environ.get("HERMES_REQUIRE_AUTH", "1").lower() not in {"0", "false", "no"}
 HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "hermes-local")
 
-PROPOSAL_STATUSES = ["waiting", "processing", "review", "approved", "implemented", "rejected"]
+PROPOSAL_STATUSES = ["waiting", "processing", "review", "changes_requested", "approved", "implemented", "rejected"]
 PROPOSAL_LABELS = {
     "waiting": "Waiting for worker",
     "processing": "In progress",
     "review": "In Review",
+    "changes_requested": "Changes requested",
     "approved": "Approved",
     "implemented": "Done",
     "rejected": "Rejected",
@@ -86,6 +87,39 @@ AGENT_COLORS = {
     "qa": "#d2991d",
     "cost": "#f85149",
 }
+
+# Map dashboard agent IDs to Kanban profiles for dispatch
+AGENT_KANBAN_PROFILE: dict[str, str] = {
+    "agent_architect": "default",
+    "agent_builder": "default",
+    "agent_reviewer": "default",
+    "agent_qa": "default",
+    "agent_product_lead": "default",
+    "agent_cost": "default",
+}
+
+# Intent-to-agent classifier: keyword heuristics that auto-assign the best agent
+# when the user doesn't pick one explicitly.  Ordered from most-specific to
+# broadest so "review the build pipeline" routes to reviewer, not builder.
+_INTENT_RULES: list[tuple[list[str], str]] = [
+    (["review", "audit", "inspect", "check", "assess", "evaluate", "critique"], "agent_reviewer"),
+    (["test", "qa", "verify", "validate", "coverage", "spec"], "agent_qa"),
+    (["research", "investigate", "explore", "survey", "compare", "benchmark", "discover"], "agent_product_lead"),
+    (["plan", "architect", "design", "blueprint", "roadmap", "strategy", "recommend", "propose", "scope"], "agent_architect"),
+    (["build", "implement", "code", "develop", "fix", "feature", "refactor", "migrate", "deploy", "ship", "write", "add", "create"], "agent_builder"),
+]
+
+_DEFAULT_AGENT = "agent_architect"
+
+
+def _infer_agent(title: str, body: str) -> str:
+    """Return the best agent ID for a proposal based on its title and body text."""
+    text = f"{title} {body}".lower()
+    for keywords, agent_id in _INTENT_RULES:
+        if any(kw in text for kw in keywords):
+            return agent_id
+    return _DEFAULT_AGENT
+
 
 AGENT_TEMPLATE_DEFS = {
     "product_lead": {
@@ -1003,12 +1037,96 @@ def budget_rows(db: sqlite3.Connection, scope_type: str | None = None, scope_id:
     return data
 
 
+def _project_dir_exists(name: str) -> bool:
+    """Check whether a project has living code at ~/Projectos/<name>."""
+    import os as _os
+    return _os.path.isdir(_os.path.join(_os.path.expanduser("~"), "Projectos", name))
+
+
+def _project_git_snapshot(name: str) -> dict[str, Any]:
+    """Return quick git state for a project directory. Empty dict if not a git repo."""
+    import os as _os
+    import subprocess as _sp
+
+    proj_dir = _os.path.join(_os.path.expanduser("~"), "Projectos", name)
+    if not _os.path.isdir(_os.path.join(proj_dir, ".git")):
+        return {}
+
+    def _git(*args: str) -> str:
+        try:
+            return _sp.run(
+                ["git", "-C", proj_dir, *args],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        except Exception:
+            return ""
+
+    return {
+        "dirty": bool(_git("status", "--porcelain")),
+        "last_commit_ts": _git("log", "-1", "--format=%ct"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "unpushed": bool(_git("log", "@{u}..", "--oneline")),
+    }
+
+
+def _git_recommendations(project_name: str, recommendations: list[dict[str, str]]) -> None:
+    """Append git-state recommendations if any are actionable."""
+    if len(recommendations) >= 3:
+        return
+
+    snap = _project_git_snapshot(project_name)
+    if not snap:
+        return
+
+    if snap.get("dirty"):
+        recommendations.append({
+            "kind": "git_dirty",
+            "title": "Uncommitted changes in ~/Projectos/" + project_name,
+            "body": "Finish up and push before context-switching — uncommitted work rots fast.",
+            "href": "",
+            "action": "Commit & push",
+        })
+        return
+
+    if snap.get("unpushed"):
+        recommendations.append({
+            "kind": "git_unpushed",
+            "title": "Commits not pushed to remote",
+            "body": f"Branch '{snap.get('branch', '?')}' has unpushed commits. Push before switching projects.",
+            "href": "",
+            "action": "Push now",
+        })
+        return
+
+    last_ts = snap.get("last_commit_ts")
+    if last_ts:
+        try:
+            age_days = (int(time.time()) - int(last_ts)) // 86400
+            if age_days > 14:
+                recommendations.append({
+                    "kind": "git_stale",
+                    "title": f"No commits in {age_days} days",
+                    "body": "Is this project stalled? Consider archiving it or picking it back up with a small win.",
+                    "href": f"/proposals/projects/project_{project_name.lower().replace('-', '_').replace(' ', '_')}#new-project-proposal",
+                    "action": "Create proposal",
+                })
+        except (ValueError, TypeError):
+            pass
+
+
 def project_recommendations(project: dict[str, Any], proposals: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Provide transparent local guidance from recorded project state."""
     recommendations: list[dict[str, str]] = []
+
+    # Git-state recommendations first — these need immediate attention
+    project_name = project.get("name", "")
+    if _project_dir_exists(project_name):
+        _git_recommendations(project_name, recommendations)
+
     pending = [proposal for proposal in proposals if proposal["has_pending_decision"]]
     waiting = [proposal for proposal in proposals if proposal["status"] == "waiting" and not proposal["has_pending_decision"]]
     in_progress = [proposal for proposal in proposals if proposal["status"] == "processing"]
+    needs_revision = [proposal for proposal in proposals if proposal["status"] == "changes_requested"]
     in_review = [proposal for proposal in proposals if proposal["status"] == "review" and not proposal["has_pending_decision"]]
     rejected = [proposal for proposal in proposals if proposal["status"] == "rejected"]
     approved = [proposal for proposal in proposals if proposal["status"] == "approved"]
@@ -1038,11 +1156,19 @@ def project_recommendations(project: dict[str, Any], proposals: list[dict[str, A
             "href": f"/proposals/{in_progress[0]['id']}",
             "action": "Review progress",
         })
+    if needs_revision and len(recommendations) < 3:
+        recommendations.append({
+            "kind": "revision",
+            "title": "Awaiting worker revision",
+            "body": "Changes were requested and the worker has been re-dispatched. Check back for updated work.",
+            "href": f"/proposals/{needs_revision[0]['id']}",
+            "action": "Check progress",
+        })
     if in_review and len(recommendations) < 3:
         recommendations.append({
             "kind": "review",
             "title": "Turn review into a clear decision",
-            "body": "Confirm acceptance criteria and record an approve or request-changes outcome.",
+            "body": "Confirm acceptance criteria and record an approve or request-revision outcome.",
             "href": f"/proposals/{in_review[0]['id']}",
             "action": "Open proposal",
         })
@@ -1071,20 +1197,31 @@ def project_recommendations(project: dict[str, Any], proposals: list[dict[str, A
             "action": "Create proposal",
         })
     if not proposals:
-        recommendations.append({
-            "kind": "start",
-            "title": "Define the first outcome",
-            "body": "Create one scoped proposal with a measurable result before assigning execution.",
-            "href": f"/proposals/projects/{project['id']}#new-project-proposal",
-            "action": "Create proposal",
-        })
-    if not project.get("desired_outcome") and len(recommendations) < 3:
+        project_name = project.get("name", "")
+        if _project_dir_exists(project_name):
+            recommendations.append({
+                "kind": "in_flight",
+                "title": "Track ongoing work",
+                "body": f"Code already lives at ~/Projectos/{project_name}. Create a proposal to formalize the next piece of work.",
+                "href": f"/proposals/projects/{project['id']}#new-project-proposal",
+                "action": "Create proposal",
+            })
+        else:
+            recommendations.append({
+                "kind": "start",
+                "title": "Create first proposal",
+                "body": "Scope the first piece of work as a proposal to start tracking progress.",
+                "href": f"/proposals/projects/{project['id']}#new-project-proposal",
+                "action": "Create proposal",
+            })
+    # Only nudge about desired_outcome when there *are* proposals (active project)
+    if proposals and not project.get("desired_outcome") and len(recommendations) < 3:
         recommendations.append({
             "kind": "context",
-            "title": "Capture the project outcome",
-            "body": "Adding a desired outcome makes future proposal choices and recommendations more useful.",
+            "title": "Set current focus",
+            "body": "Add a one-line focus to make recommendations and planning more targeted.",
             "href": f"/proposals/projects/{project['id']}#edit-project",
-            "action": "Add outcome",
+            "action": "Add focus",
         })
     return recommendations[:3]
 
@@ -1199,6 +1336,14 @@ def create_proposal_record(
 ) -> str:
     proposal_id = make_id("p")
     now = ts()
+
+    # Auto-assign an agent if none was explicitly chosen
+    if not assigned_agent_id and not is_demo:
+        assigned_agent_id = _infer_agent(title, body)
+        # When auto-assigned, jump straight to processing so the worker picks it up
+        if status == "waiting":
+            status = "processing"
+
     with db_connect() as db:
         if board != "default" and not is_demo:
             db.execute(
@@ -1224,13 +1369,16 @@ def create_proposal_record(
             "proposal",
             proposal_id,
             "proposal_created" if not is_demo else "demo_proposal_created",
-            {"title": title, "board": board, "is_demo": is_demo},
+            {"title": title, "board": board, "is_demo": is_demo, "assigned_agent_id": assigned_agent_id},
         )
         if write_trigger and assigned_agent_id:
             write_trigger_executor_meta(db, proposal_id)
         db.commit()
     if write_trigger:
         TRIGGER_FILE.write_text(proposal_id)
+    # Bridge to Kanban dispatcher if an agent is assigned
+    if assigned_agent_id and status in {"processing", "waiting"}:
+        _create_kanban_task(proposal_id)
     return proposal_id
 
 
@@ -1288,6 +1436,88 @@ def write_approved_trigger(proposal_id: str) -> None:
             return
         TRIGGER_FILE.write_text(f"APPROVED:{proposal_id}")
         write_trigger_executor_meta(db, proposal_id)
+
+
+def _kanban_board_for_project(project_id: str) -> str:
+    """Map a dashboard project ID (e.g. 'project_frontpage') to a Kanban board slug."""
+    if not project_id or project_id == "default":
+        return "default"
+    # Strip 'project_' prefix and keep the rest (underscores already match Kanban slugs)
+    return project_id.removeprefix("project_")
+
+
+def _create_kanban_task(proposal_id: str) -> bool:
+    """Bridge a proposal to the Hermes Kanban dispatcher.
+
+    Reads the proposal + assigned agent from the dashboard DB, maps the agent to
+    a Kanban profile, and calls ``hermes kanban create`` on the matching board.
+    Returns True if the task was created, False otherwise.
+    """
+    import subprocess as _sp
+    import shutil as _sh
+
+    _hermes = _sh.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+
+    with db_connect() as db:
+        proposal = row(db.execute(
+            "SELECT id, title, body, board, assigned_agent_id, status, is_demo FROM proposals WHERE id=?",
+            (proposal_id,),
+        ))
+        if not proposal or proposal.get("is_demo"):
+            return False
+
+        agent_id = proposal.get("assigned_agent_id")
+        if not agent_id:
+            return False
+
+        agent = row(db.execute("SELECT id, name, executor_type FROM agents WHERE id=?", (agent_id,)))
+        if not agent:
+            return False
+
+        # Only bridge hermes-native agents (CLI executors follow a different path)
+        if agent.get("executor_type", "hermes") != "hermes":
+            return False
+
+        profile = AGENT_KANBAN_PROFILE.get(agent_id)
+        if not profile:
+            return False
+
+        board = _kanban_board_for_project(proposal.get("board", "default"))
+        title = proposal.get("title", "Untitled")
+        body = proposal.get("body", "")
+
+        task_body = (
+            f"Dashboard proposal: http://127.0.0.1:8089/proposals/{proposal_id}\n"
+            f"Proposal ID: {proposal_id}\n"
+            f"Status: {proposal.get('status', '?')}\n\n"
+            f"─── Proposal Body ───\n{body}\n\n"
+            f"─── Instructions ───\n"
+            f"Work on the proposal above. When finished, post your findings as a comment:\n"
+            f"  curl -X POST http://127.0.0.1:8089/api/proposals/{proposal_id}/comments \\\n"
+            f"    -d 'author={agent['name']}' -d 'body=your findings here'\n"
+            f"Then mark the Kanban task complete with kanban_complete()."
+        )
+
+    try:
+        # Switch to the project's board, create task, switch back
+        _sp.run([_hermes, "kanban", "boards", "switch", board], capture_output=True, text=True, timeout=5)
+        result = _sp.run(
+            [
+                _hermes, "kanban", "create",
+                "--assignee", profile,
+                "--body", task_body,
+                "--workspace", "scratch",
+                "--json",
+                title,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        _sp.run([_hermes, "kanban", "boards", "switch", "default"], capture_output=True, text=True, timeout=5)
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def get_executor_for_proposal(db: sqlite3.Connection, proposal_id: str) -> dict[str, Any] | None:
@@ -1894,9 +2124,17 @@ async def update_proposal_status(proposal_id: str, status: str = Form(...)):
         else:
             db.execute("UPDATE proposals SET status=?, updated_at=? WHERE id=?", (status, now, proposal_id))
             create_event(db, "human", "user", "proposal", proposal_id, "proposal_status_changed", {"status": status})
+            # Write trigger for changes_requested so worker re-dispatches for revision
+            if status == "changes_requested":
+                proposal = row(db.execute("SELECT is_demo FROM proposals WHERE id=?", (proposal_id,)))
+                if proposal and not proposal.get("is_demo"):
+                    TRIGGER_FILE.write_text(proposal_id)
         db.commit()
     if status == "approved":
         write_approved_trigger(proposal_id)
+    # Bridge to Kanban dispatcher for statuses that need a worker
+    if status in {"processing", "changes_requested", "approved"}:
+        _create_kanban_task(proposal_id)
     return {"ok": True}
 
 
