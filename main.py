@@ -1337,12 +1337,11 @@ def create_proposal_record(
     proposal_id = make_id("p")
     now = ts()
 
-    # Auto-assign an agent if none was explicitly chosen
+    # Auto-assign an agent if none was explicitly chosen, but keep the proposal
+    # waiting until a worker explicitly starts it. Creation writes the trigger;
+    # status changes record actual execution progress.
     if not assigned_agent_id and not is_demo:
         assigned_agent_id = _infer_agent(title, body)
-        # When auto-assigned, jump straight to processing so the worker picks it up
-        if status == "waiting":
-            status = "processing"
 
     with db_connect() as db:
         if board != "default" and not is_demo:
@@ -1601,7 +1600,6 @@ async def root():
 
 @app.get("/proposals", response_class=HTMLResponse)
 async def proposals_list(request: Request):
-    return RedirectResponse("/proposals/projects", status_code=302)
     executor_filter = request.query_params.get("executor", "")
     status_filter = request.query_params.get("status", "")
     with db_connect() as db:
