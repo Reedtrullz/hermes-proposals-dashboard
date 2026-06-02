@@ -17,7 +17,7 @@ Each project card shows recommendations based on real state:
 - **In-flight projects** — code exists at ~/Projectos/<name>, track ongoing work
 - **New projects** — no local directory yet, create a first proposal
 
-No AI calls, no review pipeline, no approval gates. Just your directories, checked locally.
+The dashboard is local-first and does not call LLM APIs in the web request path. It can coordinate external agent/executor workflows through explicit records, trigger files, and approval states.
 
 ## Running locally
 

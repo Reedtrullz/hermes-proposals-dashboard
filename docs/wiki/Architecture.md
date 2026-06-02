@@ -4,6 +4,8 @@
 
 Hermes Proposals Dashboard is a small server-rendered application with an explicit integration boundary.
 
+The dashboard is local-first and does not call LLM APIs in the web request path. It can coordinate external agent/executor workflows through explicit records, trigger files, and approval states.
+
 ```mermaid
 flowchart TB
     Browser["Browser UI / Jinja templates"] --> FastAPI["FastAPI application (main.py)"]
