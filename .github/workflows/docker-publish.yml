@@ -2,6 +2,8 @@ name: Docker Publish
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths-ignore: ['**.md', 'deploy/**']
   push:
     branches: [master]
     paths-ignore: ['**.md', 'deploy/**']
@@ -10,6 +12,31 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build container without publishing
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          tags: hermes-proposals-dashboard:pull-request
+
   publish:
     runs-on: ubuntu-latest
     permissions:

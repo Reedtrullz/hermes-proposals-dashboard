@@ -8,6 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
+COPY project_git_state.py .
 COPY templates/ templates/
 
 EXPOSE 8089
