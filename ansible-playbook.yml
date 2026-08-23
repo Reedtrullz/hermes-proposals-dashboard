@@ -1,10 +1,14 @@
 - name: Deploy Hermes Proposals Dashboard to VPS
   hosts: vps
   gather_facts: false
-  vars:
-    image_tag: "{{ lookup('env', 'GITHUB_SHA') | default(lookup('pipe', 'git -C ' ~ playbook_dir ~ ' rev-parse --short HEAD 2>/dev/null || echo latest'), true) }}"
 
   pre_tasks:
+    - name: Require an exact published image commit
+      assert:
+        that:
+          - dashboard_image_sha is match('^[0-9a-f]{40}$')
+        fail_msg: "Set DASHBOARD_IMAGE_SHA to the full 40-character commit SHA of a published sha-<commit> image."
+
     - name: Get current container image
       community.docker.docker_container_info:
         name: "{{ container_name }}"
@@ -16,7 +20,7 @@
         previous_image: "{{ current_container.container.Config.Image if (current_container.container is defined and current_container.container) else 'none' }}"
 
   tasks:
-    - name: Pull latest image from GHCR
+    - name: Pull exact image from GHCR
       community.docker.docker_image:
         name: "{{ docker_image }}"
         source: pull
@@ -52,7 +56,7 @@
           HERMES_REQUIRE_AUTH: "1"
           HERMES_API_KEY: "{{ vault_hermes_api_key }}"
           AUTH_URL: "{{ auth_url }}"
-          VERSION: "{{ image_tag }}"
+          VERSION: "{{ dashboard_image_sha }}"
         volumes:
           - "{{ data_volume }}:/data/hermes"
 

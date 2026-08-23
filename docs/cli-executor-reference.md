@@ -75,7 +75,7 @@ agy --version           # verify
 ## Architecture: How Routing Works
 
 ```
-Dashboard (reidar.tech/proposals)
+Dashboard (reidar.tech/proposals/projects)
   │
   ├─ User creates proposal, assigns to agent with executor_type="codex"
   │

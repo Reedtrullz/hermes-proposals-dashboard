@@ -4,6 +4,8 @@
 
 Hermes Proposals Dashboard is a small server-rendered application with an explicit integration boundary.
 
+The dashboard is local-first and does not call LLM APIs in the web request path. It can coordinate external agent/executor workflows through explicit records, trigger files, and approval states.
+
 ```mermaid
 flowchart TB
     Browser["Browser UI / Jinja templates"] --> FastAPI["FastAPI application (main.py)"]
@@ -45,7 +47,7 @@ Core records include:
 
 ## Compatibility Decisions
 
-- The established `/proposals` and `/api/proposals` paths remain stable.
+- The retired `GET /proposals` list route redirects to `/proposals/projects`; proposal detail routes and `/api/proposals` remain stable.
 - The existing proposal `board` field remains the compatibility key for project grouping and project budget scopes.
 - Legacy API callers that set a non-default `board` produce a visible corresponding project.
 - Existing trigger file names and formats are not repurposed.

@@ -44,7 +44,7 @@ Recommendations are local-only — no API calls, no AI. They use `git` subproces
 - Local: launchd service (`com.reedtrullz.kanban-dashboard`) → `run.sh`
 - Tunnel: autossh (`com.reedtrullz.kanban-tunnel`) → VPS port 8089
 - VPS: Caddy reverse-proxies `/proposals*` to localhost:8089
-- Live at https://reidar.tech/proposals
+- Live at https://reidar.tech/proposals/projects (`/proposals` redirects there)
 
 ## Style
 - Keep it simple — small helper functions in main.py, no framework layers

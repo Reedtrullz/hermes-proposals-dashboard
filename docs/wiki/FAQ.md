@@ -18,7 +18,7 @@ Because saving a proposal does not prove that a worker has picked it up. A worke
 
 ## Can I explore without triggering a worker?
 
-Yes. Select **Try demo** from the Proposals page. Demo records are labeled and removable, and they do not write live execution triggers.
+Yes. Select **Try demo** from the Projects page. Demo records are labeled and removable, and they do not write live execution triggers.
 
 ## Where is data stored?
 
@@ -30,7 +30,7 @@ Yes. `POST /api/proposals` remains JSON-compatible, established URL paths remain
 
 ## What route is used for the hosted deployment?
 
-The configured route is [https://reidar.tech/proposals](https://reidar.tech/proposals).
+The configured route is [https://reidar.tech/proposals/projects](https://reidar.tech/proposals/projects). The retired `/proposals` list route redirects there.
 
 ## Which executors can proposals target?
 

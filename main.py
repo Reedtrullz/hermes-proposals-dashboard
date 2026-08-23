@@ -15,6 +15,8 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from project_git_state import _git_recommendations
+
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
 HERMES_HOME.mkdir(parents=True, exist_ok=True)
 PROPOSALS_DB = HERMES_HOME / "proposals.db"
@@ -1043,85 +1045,13 @@ def _project_dir_exists(name: str) -> bool:
     return _os.path.isdir(_os.path.join(_os.path.expanduser("~"), "Projectos", name))
 
 
-def _project_git_snapshot(name: str) -> dict[str, Any]:
-    """Return quick git state for a project directory. Empty dict if not a git repo."""
-    import os as _os
-    import subprocess as _sp
-
-    proj_dir = _os.path.join(_os.path.expanduser("~"), "Projectos", name)
-    if not _os.path.isdir(_os.path.join(proj_dir, ".git")):
-        return {}
-
-    def _git(*args: str) -> str:
-        try:
-            return _sp.run(
-                ["git", "-C", proj_dir, *args],
-                capture_output=True, text=True, timeout=5,
-            ).stdout.strip()
-        except Exception:
-            return ""
-
-    return {
-        "dirty": bool(_git("status", "--porcelain")),
-        "last_commit_ts": _git("log", "-1", "--format=%ct"),
-        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-        "unpushed": bool(_git("log", "@{u}..", "--oneline")),
-    }
-
-
-def _git_recommendations(project_name: str, recommendations: list[dict[str, str]]) -> None:
-    """Append git-state recommendations if any are actionable."""
-    if len(recommendations) >= 3:
-        return
-
-    snap = _project_git_snapshot(project_name)
-    if not snap:
-        return
-
-    if snap.get("dirty"):
-        recommendations.append({
-            "kind": "git_dirty",
-            "title": "Uncommitted changes in ~/Projectos/" + project_name,
-            "body": "Finish up and push before context-switching — uncommitted work rots fast.",
-            "href": "",
-            "action": "Commit & push",
-        })
-        return
-
-    if snap.get("unpushed"):
-        recommendations.append({
-            "kind": "git_unpushed",
-            "title": "Commits not pushed to remote",
-            "body": f"Branch '{snap.get('branch', '?')}' has unpushed commits. Push before switching projects.",
-            "href": "",
-            "action": "Push now",
-        })
-        return
-
-    last_ts = snap.get("last_commit_ts")
-    if last_ts:
-        try:
-            age_days = (int(time.time()) - int(last_ts)) // 86400
-            if age_days > 14:
-                recommendations.append({
-                    "kind": "git_stale",
-                    "title": f"No commits in {age_days} days",
-                    "body": "Is this project stalled? Consider archiving it or picking it back up with a small win.",
-                    "href": f"/proposals/projects/project_{project_name.lower().replace('-', '_').replace(' ', '_')}#new-project-proposal",
-                    "action": "Create proposal",
-                })
-        except (ValueError, TypeError):
-            pass
-
-
 def project_recommendations(project: dict[str, Any], proposals: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Provide transparent local guidance from recorded project state."""
     recommendations: list[dict[str, str]] = []
 
     # Git-state recommendations first — these need immediate attention
     project_name = project.get("name", "")
-    if _project_dir_exists(project_name):
-        _git_recommendations(project_name, recommendations)
+    _git_recommendations(project_name, recommendations)
 
     pending = [proposal for proposal in proposals if proposal["has_pending_decision"]]
     waiting = [proposal for proposal in proposals if proposal["status"] == "waiting" and not proposal["has_pending_decision"]]
@@ -1337,12 +1267,11 @@ def create_proposal_record(
     proposal_id = make_id("p")
     now = ts()
 
-    # Auto-assign an agent if none was explicitly chosen
+    # Auto-assign an agent if none was explicitly chosen, but keep the proposal
+    # waiting until a worker explicitly starts it. Creation writes the trigger;
+    # status changes record actual execution progress.
     if not assigned_agent_id and not is_demo:
         assigned_agent_id = _infer_agent(title, body)
-        # When auto-assigned, jump straight to processing so the worker picks it up
-        if status == "waiting":
-            status = "processing"
 
     with db_connect() as db:
         if board != "default" and not is_demo:
@@ -1596,64 +1525,13 @@ async def health():
 
 @app.get("/", response_class=RedirectResponse)
 async def root():
-    return RedirectResponse("/proposals", status_code=302)
-
-
-@app.get("/proposals", response_class=HTMLResponse)
-async def proposals_list(request: Request):
     return RedirectResponse("/proposals/projects", status_code=302)
-    executor_filter = request.query_params.get("executor", "")
-    status_filter = request.query_params.get("status", "")
-    with db_connect() as db:
-        if executor_filter == "cli":
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
-                WHERE a.executor_type != 'hermes' ORDER BY p.updated_at DESC LIMIT 100
-                """,
-            )
-        elif executor_filter in EXECUTOR_TYPES:
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
-                WHERE a.executor_type = ? ORDER BY p.updated_at DESC LIMIT 100
-                """,
-                (executor_filter,),
-            )
-        else:
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p ORDER BY p.updated_at DESC LIMIT 100
-                """,
-            )
-        if status_filter == "waiting":
-            proposals = [p for p in proposals if p["status"] == "waiting" and not p["has_pending_decision"]]
-        elif status_filter == "review":
-            proposals = [p for p in proposals if p["status"] in {"processing", "review"} and not p["has_pending_decision"]]
-        elif status_filter == "decision":
-            proposals = [p for p in proposals if p["has_pending_decision"]]
-        elif status_filter == "done":
-            proposals = [p for p in proposals if p["status"] in {"approved", "implemented", "rejected"} and not p["has_pending_decision"]]
-        agents = rows(db.execute("SELECT id, name, role_title FROM agents WHERE status='active' ORDER BY name"))
-        projects = rows(db.execute("SELECT id, name FROM projects WHERE status <> 'archived' ORDER BY name"))
-        return templates.TemplateResponse(
-            request=request,
-            name="proposals_list.html",
-            context=template_context({
-                "proposals": proposals,
-                "profiles": get_profiles(),
-                "executor_filter": executor_filter,
-                "status_filter": status_filter,
-                "agents": agents,
-                "projects": projects,
-            }),
-        )
+
+
+@app.get("/proposals", response_class=RedirectResponse)
+async def retired_proposals_list():
+    """Preserve old bookmarks while retiring the standalone proposal inbox."""
+    return RedirectResponse("/proposals/projects", status_code=302)
 
 
 @app.get("/proposals/goals", response_class=HTMLResponse)
@@ -1726,13 +1604,23 @@ async def setup_page(request: Request):
 async def projects_page(request: Request):
     with db_connect() as db:
         projects = projects_overview(db)
-        unassigned_count = db.execute(
-            "SELECT COUNT(*) AS n FROM proposals WHERE board='default' AND is_demo=0"
-        ).fetchone()["n"]
+        unassigned_proposals = enrich_proposals(
+            db,
+            """
+            SELECT p.*, (
+                SELECT COUNT(*) FROM proposal_comments
+                WHERE proposal_id=p.id AND parent_id IS NULL
+            ) AS top_comments
+            FROM proposals p
+            WHERE p.board='default' AND p.is_demo=0
+            ORDER BY p.updated_at DESC
+            LIMIT 100
+            """,
+        )
     return templates.TemplateResponse(
         request=request,
         name="projects.html",
-        context=template_context({"projects": projects, "unassigned_count": unassigned_count}),
+        context=template_context({"projects": projects, "unassigned_proposals": unassigned_proposals}),
     )
 
 
@@ -2082,7 +1970,7 @@ async def reset_demo_proposals():
             db.execute(f"DELETE FROM audit_events WHERE entity_type='proposal' AND entity_id IN ({markers})", proposal_ids)
             db.execute(f"DELETE FROM proposals WHERE id IN ({markers})", proposal_ids)
             db.commit()
-    return RedirectResponse("/proposals", status_code=303)
+    return RedirectResponse("/proposals/projects", status_code=303)
 
 
 @app.post("/api/proposals/dry-run")

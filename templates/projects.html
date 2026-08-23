@@ -16,6 +16,10 @@
   .suggestion-mark { flex:0 0 auto; color:var(--accent); font-size:15px; }
   .explain-panel { border-color:#29466b; background:linear-gradient(120deg,#111d2d,#11161d); }
   .explain-panel p { margin-top:9px; line-height:1.55; }
+  .proposal-list { display:grid; gap:8px; margin-top:14px; }
+  .proposal-row { display:flex; justify-content:space-between; gap:16px; align-items:center; padding:12px 14px; border:1px solid var(--border); border-radius:8px; color:inherit; text-decoration:none; }
+  .proposal-row:hover { border-color:var(--border-strong); }
+  .proposal-row strong { display:block; margin-bottom:4px; }
   @media (max-width:980px) { .projects-layout { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
@@ -60,17 +64,33 @@
       <p class="small">Create a project to group proposals and receive next-step guidance.</p>
     </section>
     {% endif %}
-    {% if unassigned_count %}
+    {% if unassigned_proposals %}
     <section class="card">
       <h3>Unassigned proposals</h3>
-      <p class="small muted">{{ unassigned_count }} real proposal{% if unassigned_count != 1 %}s are{% else %} is{% endif %} not assigned to a project yet. Open a proposal and set its project under advanced metadata.</p>
+      <p class="small muted">These proposals are not assigned to a project yet. Open one to review it or set its project under advanced metadata.</p>
+      <div class="proposal-list">
+        {% for proposal in unassigned_proposals %}
+        <a class="proposal-row" href="/proposals/{{ proposal.id }}">
+          <div>
+            <strong>{{ proposal.title }}</strong>
+            <span class="small muted">Updated <span class="reltime" data-ts="{{ proposal.updated_at }}"></span></span>
+          </div>
+          {% if proposal.has_pending_decision %}
+          <span class="badge badge-decision">Needs decision</span>
+          {% else %}
+          <span class="badge badge-{{ proposal.status }}">{{ PROPOSAL_LABELS[proposal.status] }}</span>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
     </section>
     {% endif %}
   </main>
   <aside>
     <section class="card explain-panel">
       <h3>How this works</h3>
-      <p class="small muted">Each project card shows what needs attention — uncommitted changes, stale repos, or work in progress. Recommendations come from checking actual git state in ~/Projectos/.</p>
+      <p class="small muted">Each project card shows what needs attention — uncommitted changes, stale repos, or work in progress. Recommendations come from checking actual git state in ~/Projectos/. No AI model is called automatically.</p>
+      <form action="/proposals/demo" method="post" style="margin-top:14px"><button class="btn">Try demo</button></form>
     </section>
     <section class="card" id="new-project">
       <h3>Create a project</h3>

@@ -19,13 +19,13 @@ python3 -m venv .venv
 HERMES_REQUIRE_AUTH=0 .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8089 --reload
 ```
 
-Open [http://127.0.0.1:8089/proposals](http://127.0.0.1:8089/proposals).
+Open [http://127.0.0.1:8089/proposals/projects](http://127.0.0.1:8089/proposals/projects). The retired `/proposals` list route redirects here for old bookmarks.
 
 If the repository was moved after creating `.venv`, recreate the virtual environment. The `.venv/bin/python -m uvicorn` form is intentionally used because moved console-script launchers can retain an old absolute path.
 
 ## Explore Without Execution
 
-1. On **Proposals**, select **Try demo**.
+1. On **Projects**, select **Try demo**.
 2. Read the proposal summary, review thread, timeline, and decision controls.
 3. Add a note.
 4. Select **Approve** or **Request changes**.
@@ -37,8 +37,8 @@ The demo is clearly marked and does not write worker trigger files.
 
 1. Open **Projects** and create a project.
 2. Add its desired outcome, for example, "Make client onboarding self-serve."
-3. Open the project or return to **Proposals**.
-4. Submit a proposal, selecting that project and optionally an agent.
+3. Open the project.
+4. Submit a proposal, optionally selecting an agent.
 5. The saved proposal opens immediately with **Waiting for worker** status.
 
 At this point the work is recorded, but it is not executing unless an external worker has been configured.

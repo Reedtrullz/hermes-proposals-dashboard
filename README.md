@@ -2,7 +2,7 @@
 
 A lightweight dashboard that shows your projects and what needs attention — by checking actual git state in `~/Projectos/`.
 
-**[Open Dashboard](https://reidar.tech/proposals)**
+**[Open Dashboard](https://reidar.tech/proposals/projects)**
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-server--rendered-009688?logo=fastapi&logoColor=white)
@@ -17,7 +17,7 @@ Each project card shows recommendations based on real state:
 - **In-flight projects** — code exists at ~/Projectos/<name>, track ongoing work
 - **New projects** — no local directory yet, create a first proposal
 
-No AI calls, no review pipeline, no approval gates. Just your directories, checked locally.
+The dashboard is local-first and does not call LLM APIs in the web request path. It can coordinate external agent/executor workflows through explicit records, trigger files, and approval states.
 
 ## Running locally
 
@@ -27,7 +27,7 @@ python3 -m venv .venv
 HERMES_REQUIRE_AUTH=0 .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8089 --reload
 ```
 
-Open http://127.0.0.1:8089/proposals
+Open http://127.0.0.1:8089/proposals/projects
 
 ## Deployment
 
