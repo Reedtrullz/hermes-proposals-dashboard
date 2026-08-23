@@ -36,7 +36,7 @@ The compose service exposes port `8089`, stores persistent application state in 
 The repository's Ansible deployment is configured for:
 
 ```text
-https://reidar.tech/proposals
+https://reidar.tech/proposals/projects
 ```
 
 The application container listens internally on port `8089` and the VPS maps it to localhost port `8091` before Caddy handles `/proposals*`, `/api/proposals*`, and `/api/agents*` requests.
@@ -45,7 +45,7 @@ The application container listens internally on port `8089` and the VPS maps it 
 
 The root playbook:
 
-- Pulls `ghcr.io/reedtrullz/hermes-proposals-dashboard:latest`.
+- Requires the full commit SHA in `DASHBOARD_IMAGE_SHA` and pulls the immutable `ghcr.io/reedtrullz/hermes-proposals-dashboard:sha-<commit>` image.
 - Runs the `hermes-proposals-dashboard` container.
 - Persists state in the `hermes_proposals_data` Docker volume.
 - Requires auth and supplies the API key from encrypted vault data.
@@ -56,9 +56,11 @@ The root playbook:
 Validate and deploy:
 
 ```bash
-ansible-playbook ansible-playbook.yml --syntax-check
-ansible-playbook ansible-playbook.yml
+DASHBOARD_IMAGE_SHA="$(git rev-parse HEAD)" ansible-playbook ansible-playbook.yml --syntax-check
+DASHBOARD_IMAGE_SHA="$(git rev-parse HEAD)" ansible-playbook ansible-playbook.yml
 ```
+
+Deploy only after the publish workflow has completed for that exact commit. The playbook rejects missing, shortened, or malformed SHAs and has no mutable `latest` fallback.
 
 ## Secrets
 
@@ -69,7 +71,7 @@ ansible-playbook ansible-playbook.yml
 After deployment:
 
 1. Confirm the playbook's health check succeeds.
-2. Confirm the authenticated `/proposals` route opens through `reidar.tech`.
+2. Confirm the authenticated `/proposals/projects` route opens through `reidar.tech` and `/proposals` redirects there.
 3. Confirm SQLite state persists across container restarts.
 4. Confirm a test proposal writes expected trigger data only when worker integration is intended.
 5. Keep demo validation separate from real worker triggering.

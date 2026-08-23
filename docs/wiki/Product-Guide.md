@@ -2,26 +2,25 @@
 
 ## Navigation
 
-The primary interface is organized around four working destinations plus configuration:
+The primary interface is organized around projects, operational views, and configuration:
 
 | Destination | What it answers |
 | --- | --- |
-| **Proposals** | What work has been submitted and what state is it in? |
 | **Projects** | What initiatives am I advancing and what should happen next? |
 | **Reviews** | Which decisions require human input? |
 | **Workflows** | What staged processes and handoffs exist? |
 | **Settings** | How are goals, agents, budgets, and workers configured? |
 
-## Proposals Inbox
+## Proposal Intake
 
-The inbox is the starting point for work intake. It supports:
+The standalone Proposals inbox is retired. `GET /proposals` redirects old bookmarks to Projects. Work intake now happens from a project detail page, while unassigned proposals remain linked from Projects.
 
-- A visible new-proposal form with title, outcome, optional project, and optional assignment.
-- Filtered views for all items, waiting work, review items, decisions, and completed items.
-- A first-run demo action.
-- Worker guidance that states the external execution requirement.
+- Project detail provides a new-proposal form with title, outcome, and optional assignment.
+- Projects lists unassigned proposals so they remain discoverable.
+- Projects provides the first-run demo action.
+- Settings explains the external worker requirement.
 
-New browser submissions redirect to the authoritative proposal detail page rather than leaving an unchanged form behind.
+Browser submissions redirect to the authoritative proposal detail page.
 
 ## Proposal Detail
 

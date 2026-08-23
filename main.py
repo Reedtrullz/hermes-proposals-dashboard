@@ -1525,63 +1525,13 @@ async def health():
 
 @app.get("/", response_class=RedirectResponse)
 async def root():
-    return RedirectResponse("/proposals", status_code=302)
+    return RedirectResponse("/proposals/projects", status_code=302)
 
 
-@app.get("/proposals", response_class=HTMLResponse)
-async def proposals_list(request: Request):
-    executor_filter = request.query_params.get("executor", "")
-    status_filter = request.query_params.get("status", "")
-    with db_connect() as db:
-        if executor_filter == "cli":
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
-                WHERE a.executor_type != 'hermes' ORDER BY p.updated_at DESC LIMIT 100
-                """,
-            )
-        elif executor_filter in EXECUTOR_TYPES:
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p JOIN agents a ON a.id = p.assigned_agent_id
-                WHERE a.executor_type = ? ORDER BY p.updated_at DESC LIMIT 100
-                """,
-                (executor_filter,),
-            )
-        else:
-            proposals = enrich_proposals(
-                db,
-                """
-                SELECT p.*, (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id=p.id AND parent_id IS NULL) AS top_comments
-                FROM proposals p ORDER BY p.updated_at DESC LIMIT 100
-                """,
-            )
-        if status_filter == "waiting":
-            proposals = [p for p in proposals if p["status"] == "waiting" and not p["has_pending_decision"]]
-        elif status_filter == "review":
-            proposals = [p for p in proposals if p["status"] in {"processing", "review"} and not p["has_pending_decision"]]
-        elif status_filter == "decision":
-            proposals = [p for p in proposals if p["has_pending_decision"]]
-        elif status_filter == "done":
-            proposals = [p for p in proposals if p["status"] in {"approved", "implemented", "rejected"} and not p["has_pending_decision"]]
-        agents = rows(db.execute("SELECT id, name, role_title FROM agents WHERE status='active' ORDER BY name"))
-        projects = rows(db.execute("SELECT id, name FROM projects WHERE status <> 'archived' ORDER BY name"))
-        return templates.TemplateResponse(
-            request=request,
-            name="proposals_list.html",
-            context=template_context({
-                "proposals": proposals,
-                "profiles": get_profiles(),
-                "executor_filter": executor_filter,
-                "status_filter": status_filter,
-                "agents": agents,
-                "projects": projects,
-            }),
-        )
+@app.get("/proposals", response_class=RedirectResponse)
+async def retired_proposals_list():
+    """Preserve old bookmarks while retiring the standalone proposal inbox."""
+    return RedirectResponse("/proposals/projects", status_code=302)
 
 
 @app.get("/proposals/goals", response_class=HTMLResponse)
@@ -1654,13 +1604,23 @@ async def setup_page(request: Request):
 async def projects_page(request: Request):
     with db_connect() as db:
         projects = projects_overview(db)
-        unassigned_count = db.execute(
-            "SELECT COUNT(*) AS n FROM proposals WHERE board='default' AND is_demo=0"
-        ).fetchone()["n"]
+        unassigned_proposals = enrich_proposals(
+            db,
+            """
+            SELECT p.*, (
+                SELECT COUNT(*) FROM proposal_comments
+                WHERE proposal_id=p.id AND parent_id IS NULL
+            ) AS top_comments
+            FROM proposals p
+            WHERE p.board='default' AND p.is_demo=0
+            ORDER BY p.updated_at DESC
+            LIMIT 100
+            """,
+        )
     return templates.TemplateResponse(
         request=request,
         name="projects.html",
-        context=template_context({"projects": projects, "unassigned_count": unassigned_count}),
+        context=template_context({"projects": projects, "unassigned_proposals": unassigned_proposals}),
     )
 
 
@@ -2010,7 +1970,7 @@ async def reset_demo_proposals():
             db.execute(f"DELETE FROM audit_events WHERE entity_type='proposal' AND entity_id IN ({markers})", proposal_ids)
             db.execute(f"DELETE FROM proposals WHERE id IN ({markers})", proposal_ids)
             db.commit()
-    return RedirectResponse("/proposals", status_code=303)
+    return RedirectResponse("/proposals/projects", status_code=303)
 
 
 @app.post("/api/proposals/dry-run")

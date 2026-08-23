@@ -38,4 +38,4 @@ SQLite, git subprocess, and filesystem checks. Runs on your machine, serves over
 - Budgets, workflows, handoffs, and audit events are tracked as operational metadata for explicit dashboard actions.
 
 ## Deployment
-Hosted at [reidar.tech/proposals](https://reidar.tech/proposals). Can run locally: `HERMES_REQUIRE_AUTH=0 .venv/bin/python -m uvicorn main:app --port 8089`.
+Hosted at [reidar.tech/proposals/projects](https://reidar.tech/proposals/projects). Can run locally: `HERMES_REQUIRE_AUTH=0 .venv/bin/python -m uvicorn main:app --port 8089`.

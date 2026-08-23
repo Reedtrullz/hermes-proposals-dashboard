@@ -1,5 +1,6 @@
 domain: reidar.tech
-docker_image: ghcr.io/reedtrullz/hermes-proposals-dashboard:latest
+dashboard_image_sha: "{{ lookup('env', 'DASHBOARD_IMAGE_SHA') }}"
+docker_image: "ghcr.io/reedtrullz/hermes-proposals-dashboard:sha-{{ dashboard_image_sha }}"
 container_name: hermes-proposals-dashboard
 host_port: "8091"
 container_port: "8089"

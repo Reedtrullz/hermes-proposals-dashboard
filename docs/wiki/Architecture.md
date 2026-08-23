@@ -47,7 +47,7 @@ Core records include:
 
 ## Compatibility Decisions
 
-- The established `/proposals` and `/api/proposals` paths remain stable.
+- The retired `GET /proposals` list route redirects to `/proposals/projects`; proposal detail routes and `/api/proposals` remain stable.
 - The existing proposal `board` field remains the compatibility key for project grouping and project budget scopes.
 - Legacy API callers that set a non-default `board` produce a visible corresponding project.
 - Existing trigger file names and formats are not repurposed.

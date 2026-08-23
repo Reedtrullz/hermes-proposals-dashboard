@@ -34,7 +34,7 @@
   <h2>Worker setup</h2>
   <p>Proposals are stored locally in SQLite. Saving a real proposal writes its id to the existing trigger file, but this dashboard does not itself execute a worker or call a paid LLM provider.</p>
   <div class="worker-steps">
-    <div><span>1.</span><p>Use <strong>Try demo</strong> on the Proposals page to explore review and decision controls without executing anything.</p></div>
+    <div><span>1.</span><p>Use <strong>Try demo</strong> on the Projects page to explore review and decision controls without executing anything.</p></div>
     <div><span>2.</span><p>Configure an external Hermes worker or CLI worker to consume <code>$HERMES_HOME/proposals_trigger</code> and, when present, <code>proposals_trigger_executor</code>.</p></div>
     <div><span>3.</span><p>When you approve a real proposal, the dashboard writes <code>APPROVED:&lt;id&gt;</code> through the existing integration.</p></div>
   </div>

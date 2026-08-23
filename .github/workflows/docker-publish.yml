@@ -38,6 +38,7 @@ jobs:
           tags: hermes-proposals-dashboard:pull-request
 
   publish:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -68,7 +69,7 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
-          tags: latest
+          tags: type=raw,value=sha-${{ github.sha }}
 
       - uses: docker/build-push-action@v6
         with:

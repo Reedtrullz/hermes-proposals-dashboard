@@ -104,25 +104,28 @@ def test_existing_proposal_api_and_agent_goal_linking(tmp_path, monkeypatch):
         assert "proposal_metadata_updated" in {r["event_type"] for r in events}
 
 
-def test_proposals_page_renders_first_use_and_settings_navigation(tmp_path, monkeypatch):
+def test_retired_proposals_list_redirects_to_projects(tmp_path, monkeypatch):
     main = load_main(tmp_path, monkeypatch)
     client = TestClient(main.app)
-    client.post("/api/proposals", data={"title": "Rendered card"})
 
-    response = client.get("/proposals")
+    for path in ["/", "/proposals", "/proposals?status=waiting"]:
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers["location"] == "/proposals/projects"
+
+
+def test_projects_page_links_unassigned_proposals(tmp_path, monkeypatch):
+    main = load_main(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+    proposal_id = client.post("/api/proposals", data={"title": "Rendered card"}).json()["id"]
+
+    response = client.get("/proposals/projects")
 
     assert response.status_code == 200
+    assert "Unassigned proposals" in response.text
     assert "Rendered card" in response.text
-    assert "Try demo" in response.text
-    assert "Submit work for review, track decisions, and connect execution when ready." in response.text
-    assert "Live execution needs setup" in response.text
-    assert 'action="/proposals"' in response.text
-    assert 'for="new-proposal-title"' in response.text
-    assert "Waiting for worker" in response.text
-    assert 'href="/proposals/workflows"' in response.text
-    assert 'href="/proposals/approvals"' in response.text
-    assert 'href="/proposals/projects"' in response.text
-    assert 'href="/proposals/settings"' in response.text
+    assert f'href="/proposals/{proposal_id}"' in response.text
+    assert 'action="/proposals/demo"' in response.text
 
 
 def test_prefixed_ops_pages_and_api_routes_work_under_proposals(tmp_path, monkeypatch):
@@ -538,13 +541,13 @@ def test_demo_walkthrough_is_idempotent_and_reset_only_removes_demo_data(tmp_pat
     assert "Needs decision" in detail.text
     assert "Activity timeline" in detail.text
     assert "Decision requested" in detail.text
-    assert "Feature Delivery" in client.get("/proposals").text
+    assert "Feature Delivery" in detail.text
     decision = client.post(f"/api/proposals/{demo_id}/status", data={"status": "approved"}, follow_redirects=False)
     assert decision.status_code == 303
     assert not (tmp_path / "proposals_trigger").exists()
 
     reset = client.post("/proposals/demo/reset", follow_redirects=False)
-    assert reset.headers["location"] == "/proposals"
+    assert reset.headers["location"] == "/proposals/projects"
     with main.db_connect() as db:
         assert db.execute("SELECT COUNT(*) AS n FROM proposals WHERE is_demo=1").fetchone()["n"] == 0
         assert db.execute("SELECT COUNT(*) AS n FROM proposals WHERE id=?", (real_id,)).fetchone()["n"] == 1
