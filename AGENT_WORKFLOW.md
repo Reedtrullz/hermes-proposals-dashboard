@@ -216,3 +216,11 @@ Age alone is not a reason to close valid work.
 - **Area options:** Authentication and access / Proposal dispatch and approvals / Workflow and financial state / Project guidance and UX / Runtime and deployment
 
 Project fields, saved views and repository linkage were read back through ProjectV2 GraphQL on 2026-10-07. Native workflows are configured and verified separately; an enabled workflow flag alone does not establish its action target. Closure of an Issue as not planned must not assert completed implementation. Existing repository instructions, domain acceptance and release gates take precedence.
+
+## Validation of workflow-contract-only pull requests
+
+A PR whose complete diff contains only AGENT_WORKFLOW.md may use the manual commit status `engineering/workflow-contract` for documentation validation when no automated PR checks are configured for Markdown. The verifier must publish a receipt for the exact head: complete diff, canonical-template comparison, actual Project repository linkage and all seven planning-field option sets, applicable repository instructions, closing-reference scope, and any push/publication side effects. The status must identify itself as manual documentation validation; it is not application CI or runtime acceptance.
+
+Any reported required checks and required reviews must still pass. A pending or failed check, substantive contract defect, incompatible Project binding, unintended closing reference, or unapproved deployment blocks merge. The final merge must compare the reviewed head and use ordinary repository rules without an administrator bypass. Revalidate if the head, instructions or Project configuration changes.
+
+This policy applies only to this single workflow-contract file. Application, authentication, data, dependency, infrastructure, generated-content and other documentation changes require their own applicable validation and acceptance; this narrow policy cannot certify or waive those gates. Preserve all local WIP, private stores, frozen inputs and domain acceptance constraints.
