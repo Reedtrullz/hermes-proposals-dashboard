@@ -1,5 +1,7 @@
 import json
 import os
+
+import dashboard_auth
 import re
 import shutil
 import sqlite3
@@ -24,9 +26,11 @@ TRIGGER_FILE = HERMES_HOME / "proposals_trigger"
 TRIGGER_EXECUTOR_FILE = HERMES_HOME / "proposals_trigger_executor"
 PROFILES_DIR = HERMES_HOME / "profiles"
 
-AUTH_URL = os.environ.get("AUTH_URL", "https://reidar.tech")
+AUTH_URL = os.environ.get("AUTH_URL", "")
+OWNER_GITHUB_ID = os.environ.get("OWNER_GITHUB_ID", "")
+OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 HERMES_REQUIRE_AUTH = os.environ.get("HERMES_REQUIRE_AUTH", "1").lower() not in {"0", "false", "no"}
-HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "hermes-local")
+HERMES_API_KEY = os.environ.get("HERMES_API_KEY", "")
 
 PROPOSAL_STATUSES = ["waiting", "processing", "review", "changes_requested", "approved", "implemented", "rejected"]
 PROPOSAL_LABELS = {
@@ -1494,19 +1498,39 @@ init_db()
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/health":
+        if request.url.path == "/health" and request.method == "GET":
             return await call_next(request)
+
+        # Development opt-out is never a remote-facing/proxy authentication mode.
         if not HERMES_REQUIRE_AUTH:
-            return await call_next(request)
-        if request.headers.get("X-Hermes-Key") == HERMES_API_KEY:
-            return await call_next(request)
-        token = request.cookies.get("__Secure-authjs.session-token") or request.cookies.get("authjs.session-token")
-        if request.url.path.startswith("/api/"):
-            if not token:
+            peer = request.client.host if request.client else None
+            if dashboard_auth.local_auth_off_allowed(peer, request.headers.get("host", "")):
+                return await call_next(request)
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+
+        # Machine credentials must never inherit owner/session privileges.
+        keys = request.headers.getlist("x-hermes-key")
+        if keys:
+            if not dashboard_auth.machine_key_valid(keys, HERMES_API_KEY):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
-        elif not token:
-            return RedirectResponse(f"{AUTH_URL}/api/auth/signin")
-        return await call_next(request)
+            if not dashboard_auth.machine_route_allowed(request.method, request.url.path):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+            return await call_next(request)
+
+        # Validate the current session with the *configured* trusted issuer,
+        # not the presence of cookie bytes or request-derived host headers.
+        cookies = request.headers.getlist("cookie")
+        verified = await dashboard_auth.verify_owner_session(
+            cookies, AUTH_URL, OWNER_GITHUB_ID, OWNER_EMAIL
+        )
+        if verified:
+            return await call_next(request)
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        issuer = dashboard_auth.trusted_issuer_origin(AUTH_URL)
+        if issuer:
+            return RedirectResponse(f"{issuer}/api/auth/signin", status_code=303)
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
 
 
 app = FastAPI(title="Hermes Agent Operations Dashboard")
